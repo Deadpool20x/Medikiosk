@@ -1,0 +1,25 @@
+# Secrets & Environment
+.env
+.env.local
+.env.*.local
+
+# Ruflo / Claude runtime
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+
+# Python & Backend
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+backend/data/*.db
+
+# Node & Frontend
+node_modules/
+.next/
+out/
+build/
+dist/
+*.tsbuildinfo

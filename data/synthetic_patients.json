@@ -1,0 +1,72 @@
+[
+  {
+    "name": "Rohan Sharma",
+    "age": 34,
+    "gender": "Male",
+    "chief_complaint": "Persistent dry cough for two weeks",
+    "onset": "14 days ago",
+    "duration": "Constant, worse at night",
+    "severity": "Moderate (5/10)",
+    "character": "Dry hacking cough",
+    "associated_symptoms": [
+      "Mild fatigue",
+      "Occasional low-grade evening fever"
+    ]
+  },
+  {
+    "name": "Priya Patel",
+    "age": 28,
+    "gender": "Female",
+    "chief_complaint": "Throbbing right-sided headache with nausea",
+    "onset": "Yesterday morning",
+    "duration": "Intermittent episodes lasting 3-4 hours",
+    "severity": "Severe (8/10)",
+    "character": "Throbbing, pulsating sensation",
+    "associated_symptoms": [
+      "Nausea",
+      "Sensitivity to light (photophobia)"
+    ]
+  },
+  {
+    "name": "Anand Verma",
+    "age": 52,
+    "gender": "Male",
+    "chief_complaint": "Epigastric burning sensation after meals",
+    "onset": "3 weeks ago",
+    "duration": "Daily after dinner",
+    "severity": "Mild to moderate (4/10)",
+    "character": "Burning, acidic discomfort",
+    "associated_symptoms": [
+      "Sour taste in mouth",
+      "Bloating"
+    ]
+  },
+  {
+    "name": "Sunita Devi",
+    "age": 46,
+    "gender": "Female",
+    "chief_complaint": "Bilateral knee joint pain on climbing stairs",
+    "onset": "2 months ago",
+    "duration": "Gradual progression",
+    "severity": "Moderate (6/10)",
+    "character": "Dull ache with morning stiffness",
+    "associated_symptoms": [
+      "Crepitus sensation in knees",
+      "Mild ankle swelling"
+    ]
+  },
+  {
+    "name": "Vikram Malhotra",
+    "age": 22,
+    "gender": "Male",
+    "chief_complaint": "Acute watery diarrhea and abdominal cramping",
+    "onset": "12 hours ago",
+    "duration": "6 episodes today",
+    "severity": "Moderate (6/10)",
+    "character": "Colicky lower abdominal cramps",
+    "associated_symptoms": [
+      "Nausea",
+      "Thirst and mild weakness"
+    ]
+  }
+]

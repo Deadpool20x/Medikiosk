@@ -1,0 +1,11 @@
+{
+  "timestamp": "2026-09-07T14:30:05.463Z",
+  "projectRoot": "D:\\project\\Medikishok",
+  "structure": {
+    "hasPackageJson": false,
+    "hasTsConfig": false,
+    "hasClaudeConfig": true,
+    "hasClaudeFlow": true
+  },
+  "scannedAt": 1788791405463
+}
