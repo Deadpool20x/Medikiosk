@@ -1,28 +1,18 @@
 import Link from "next/link";
+import { Icon } from "../components/icons";
 
 export default function HomePage() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl text-slate-900">
-        MediKiosk Case-Taking System
-      </h2>
-      <p className="mt-4 max-w-2xl text-base text-slate-600">
-        AI-assisted pre-consultation intake portal. Choose your interface below:
-      </p>
-      <div className="mt-8 flex gap-4">
-        <Link
-          href="/patient"
-          className="rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white shadow hover:bg-blue-700 transition"
-        >
-          Patient Kiosk
-        </Link>
-        <Link
-          href="/doctor"
-          className="rounded-lg border border-slate-300 bg-white px-6 py-3 font-semibold text-slate-700 shadow-sm hover:bg-slate-50 transition"
-        >
-          Doctor Dashboard
-        </Link>
-      </div>
-    </div>
+    <main className="mk-home">
+      <section className="mk-home__intro">
+        <p className="mk-eyebrow">MediKiosk</p>
+        <h1>Calm case-taking. Clear clinical review.</h1>
+        <p>Choose the patient kiosk or the clinician workspace. All content is a synthetic demonstration.</p>
+        <div className="mk-home__actions">
+          <Link className="mk-button mk-button--primary" href="/patient">Patient kiosk <Icon className="mk-icon" name="arrow-right" /></Link>
+          <Link className="mk-button mk-button--secondary" href="/doctor">Doctor workspace <Icon className="mk-icon" name="arrow-right" /></Link>
+        </div>
+      </section>
+    </main>
   );
 }
