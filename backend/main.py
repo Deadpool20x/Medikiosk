@@ -1,4 +1,11 @@
+import os
 from contextlib import asynccontextmanager
+from dotenv import load_dotenv
+
+# Load .env from project root so os.environ picks up API keys before any
+# provider module reads them.  Must happen before backend imports.
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -43,7 +50,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError):
     return JSONResponse(
-        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content=ErrorResponse(
             error="Invalid input provided. Please verify the submitted data.",
             retryable=False
@@ -60,4 +67,9 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "backend.main:app",
+        host="0.0.0.0",
+        port=int(os.getenv("BACKEND_PORT", "8000")),
+        reload=True,
+    )
