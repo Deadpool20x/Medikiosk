@@ -1,0 +1,30 @@
+# MediKiosk — System Context for LLMs & AI Coding Agents
+
+> Project: MediKiosk (Smart India Hackathon 2026)
+> Core Role: Clinical AI Reception, Intake Triage, and OPD Queue Management System
+> Tech Stack: FastAPI (Python 3.11+), SQLite (WAL mode), Next.js 16 (React 19, Tailwind CSS v4)
+
+## Critical Engineering Invariants
+
+1. **Deterministic Safety Gate**:
+   - Implemented in `backend/rules/safety_rules.py`.
+   - Keyword-based screening across `RED_FLAG_PHRASES`.
+   - If triggered: `safety_flagged = True`, normal token issuance is forbidden (HTTP 403), physician cannot confirm without resolution (HTTP 409).
+   - NEVER delegate safety flagging to an LLM.
+
+2. **Deterministic Department Routing**:
+   - Implemented in `backend/rules/department_rules.py`.
+   - Keywords map complaints to OPD departments (e.g. `Sthaulya` -> Panchakarma `PK-xxx`, else Kayachikitsa `KY-xxx`).
+   - NEVER delegate department assignment to an LLM.
+
+3. **Database Architecture**:
+   - SQLite with WAL mode (`PRAGMA journal_mode = WAL;`) and 30-second busy timeout.
+   - Token generation uses atomic transactions with sequence locking.
+
+4. **Multi-Provider AI Fallback**:
+   - Chat/Extraction: Groq (`openai/gpt-oss-20b`), NVIDIA NIM, OpenRouter.
+   - Vision OCR: Google Gemini Vision (`gemini-2.5-flash`), Groq Vision (`qwen/qwen3.6-27b`).
+   - Confidence threshold: 0.5. Values below threshold require physician review in D03.
+
+5. **Doctor Workspace Security**:
+   - Guarded by loopback client verification in demo mode and optional `DOCTOR_SECRET_TOKEN` (`X-Doctor-Token` header) in production.
