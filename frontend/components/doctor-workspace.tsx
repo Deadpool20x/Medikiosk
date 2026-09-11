@@ -1,46 +1,289 @@
 "use client";
 
-import { useState } from "react";
-import { Button, Card, ConfidenceIndicator, EmptyState, FieldLabel, Input, StateNotice, StatusBadge, Textarea } from "./ui";
-import { Icon } from "./icons";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { getEmergencySessions } from "../lib/api";
+import type { EmergencyItem } from "../lib/types";
+import { DoctorQueue } from "./doctor-queue";
+import { DoctorCase } from "./doctor-case";
+import { DoctorReview } from "./doctor-review";
 
-type View = "list" | "detail" | "document";
+function MediKioskLogo() {
+  return (
+    <svg viewBox="0 0 40 40" fill="none" className="w-8 h-8" aria-hidden="true">
+      <rect width="40" height="40" rx="10" fill="#111111" />
+      <path d="M20 10v20M10 20h20" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-const cases = [
-  { id: "MK-DEMO-1042", patient: "Demo patient", complaint: "Headache and fever", time: "Today · 10:32", status: "Review needed" },
-  { id: "MK-DEMO-1041", patient: "Demo patient", complaint: "Persistent cough", time: "Today · 09:18", status: "Ready for review" },
-  { id: "MK-DEMO-1040", patient: "Demo patient", complaint: "Back pain", time: "Yesterday · 16:40", status: "Confirmed" },
+type View =
+  | { kind: "emergency" }
+  | { kind: "queue"; department: string }
+  | { kind: "case"; sessionId: string; department: string }
+  | { kind: "review"; sessionId: string; department: string };
+
+const SIDEBAR_ITEMS: Array<{ key: string; label: string; kind: View }> = [
+  { key: "emergency", label: "Emergency Escalations", kind: { kind: "emergency" } },
+  { key: "kaya", label: "Kayachikitsa Queue", kind: { kind: "queue", department: "Kayachikitsa" } },
+  { key: "pancha", label: "Panchakarma Queue", kind: { kind: "queue", department: "Panchakarma" } },
 ];
 
 export function DoctorWorkspace() {
-  const [view, setView] = useState<View>("list");
-  const [confirmed, setConfirmed] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [complaint, setComplaint] = useState("Headache and fever since yesterday");
-  const [search, setSearch] = useState("");
-  const filtered = cases.filter((item) => `${item.id} ${item.patient} ${item.complaint}`.toLowerCase().includes(search.toLowerCase()));
+  const [view, setView] = useState<View>({ kind: "emergency" });
 
-  if (view === "detail") return <CaseDetail complaint={complaint} confirmed={confirmed} editing={editing} onComplaint={setComplaint} onEdit={() => setEditing((value) => !value)} onBack={() => setView("list")} onDocument={() => setView("document")} onConfirm={() => setConfirmed(true)} />;
-  if (view === "document") return <DocumentReview onBack={() => setView("detail")} />;
+  function selectView(v: View) {
+    window.sessionStorage.setItem("mk_doctor_view", JSON.stringify(v));
+    setView(v);
+  }
 
-  return <main className="mk-doctor-page"><div className="mk-doctor-shell"><header className="mk-doctor-header"><div><p className="mk-eyebrow">Doctor workspace</p><h1>Cases awaiting review</h1><p>Demo workspace · all displayed case information is synthetic.</p></div><StatusBadge tone="neutral">3 demo cases</StatusBadge></header><Card className="mk-case-list"><div className="mk-case-toolbar"><div className="mk-search"><Icon name="search" className="mk-icon" /><Input aria-label="Search demo cases" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search a case" /></div><div className="mk-filter-group"><button type="button" className="mk-filter is-active">All cases</button><button type="button" className="mk-filter">Needs review</button></div></div><div className="mk-case-table" role="table" aria-label="Demo case list"><div className="mk-case-row mk-case-row--head" role="row"><span>Case</span><span>Chief complaint</span><span>Status</span><span>Submitted</span><span /></div>{filtered.map((item) => <button type="button" className="mk-case-row" role="row" key={item.id} onClick={() => setView("detail")}><span><strong>{item.patient}</strong><small>{item.id}</small></span><span>{item.complaint}</span><span><CaseStatus status={item.status} /></span><span>{item.time}</span><Icon name="chevron-right" className="mk-icon" /></button>)}</div>{filtered.length === 0 ? <EmptyState title="No cases found" detail="Try a different patient, session reference, or complaint." /> : null}</Card></div></main>;
+  const [items, setItems] = useState<EmergencyItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
+  const [refreshing, setRefreshing] = useState(false);
+
+  async function load() {
+    try {
+      const data = await getEmergencySessions();
+      setItems(data);
+      setError(null);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = window.sessionStorage.getItem("mk_doctor_view");
+    if (saved) {
+      try {
+        const p = JSON.parse(saved);
+        if (p && (p.kind === "emergency" || p.kind === "queue")) setView(p);
+        else if (p && (p.kind === "case" || p.kind === "review") && typeof p.sessionId === "string") setView(p);
+      } catch { /* ignore malformed */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function ack(id: string) {
+    setAcknowledged((prev) => new Set(prev).add(id));
+  }
+
+  if (view.kind === "review") {
+    return (
+      <DoctorReview
+        sessionId={view.sessionId}
+        department={view.department}
+        onBack={() => selectView({ kind: "case", sessionId: view.sessionId, department: view.department })}
+        onNavQueue={() => selectView({ kind: "queue", department: view.department })}
+      />
+    );
+  }
+
+  return (
+    <div className="mk-doctor-shell">
+      <aside className="mk-sidebar">
+        <div className="mk-sidebar__brand">
+          <MediKioskLogo />
+          <span className="mk-sidebar__wordmark">MediKiosk</span>
+        </div>
+        <nav className="mk-sidebar__nav">
+          {SIDEBAR_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              className="mk-sidebar__item"
+              data-active={JSON.stringify(view) === JSON.stringify(item.kind)}
+              onClick={() => selectView(item.kind)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </nav>
+        <div className="mk-sidebar__user">
+          <div className="mk-sidebar__avatar">MK</div>
+          <div>
+            <div className="mk-sidebar__name">Demo Clinician</div>
+            <div className="mk-sidebar__role">On-Site Workstation</div>
+          </div>
+        </div>
+      </aside>
+
+      <main className="mk-main-content">
+        {error && view.kind !== "emergency" && <div className="mk-error-banner" role="alert" style={{ marginBottom: "16px" }}>{error}</div>}
+
+        {view.kind === "emergency" && (
+          <>
+            <div className="mk-d04-header-card">
+              <div className="mk-d04-header-card__text">
+                <h1 className="mk-d04-page-title">Emergency Safety Escalations</h1>
+                <p className="mk-d04-page-desc">
+                  Patients whose intake was paused for safety review appear here. They do not receive a normal department queue token.
+                </p>
+              </div>
+              <button
+                className="mk-d04-refresh"
+                onClick={() => { setRefreshing(true); load(); }}
+                disabled={refreshing}
+              >
+                <RefreshIcon />
+                {refreshing ? "Refreshing…" : "Refresh"}
+              </button>
+            </div>
+
+            <div className="mk-d04-queue-section">
+              <div className="mk-d04-queue-heading">
+                <span className="mk-d04-queue-heading__text">Active Escalation Queue</span>
+              </div>
+
+              {error ? (
+                <div className="mk-d04-error" role="alert">
+                  <p className="mk-d04-error__text">Could not load safety escalations.</p>
+                  <button
+                    className="mk-d04-refresh"
+                    onClick={() => { setError(null); setLoading(true); load(); }}
+                  >
+                    Retry
+                  </button>
+                </div>
+              ) : loading ? (
+                <div className="mk-d04-loading">
+                  <span className="mk-d04-loading__spinner" />
+                  <span>Loading escalations…</span>
+                </div>
+              ) : items.length === 0 ? (
+                <div className="mk-d04-empty">
+                  <p className="mk-d04-empty__text">No active safety escalations.</p>
+                </div>
+              ) : (
+                <div className="mk-d04-alert-list">
+                  {items.map((item) => {
+                    const done = acknowledged.has(item.session_id);
+                    return (
+                      <div key={item.session_id} className="mk-d04-alert-card">
+                        <div className="mk-d04-alert-card__main">
+                          <div className="mk-d04-alert-icon">
+                            <WarningIcon />
+                          </div>
+                          <div className="mk-d04-alert-card__body">
+                            <div className="mk-d04-alert-card__head">
+                              <span className="mk-d04-alert-code">{item.patient_code}</span>
+                              <span className="mk-d04-alert-badge">{item.status}</span>
+                            </div>
+                            <p className="mk-d04-alert-symptom">
+                              {item.patient_name} — {item.symptom}
+                            </p>
+                            <div className="mk-d04-alert-meta">
+                              <span>Reported at: <strong className="mk-d04-alert-meta__time">{formatTime(item.reported_at)}</strong></span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mk-d04-alert-card__action">
+                          <button
+                            className={`mk-d04-ack-btn ${done ? "mk-d04-ack-btn--done" : ""}`}
+                            onClick={() => ack(item.session_id)}
+                            disabled={done}
+                          >
+                            {done ? (
+                              <>
+                                <CheckIcon />
+                                <span>Acknowledged</span>
+                              </>
+                            ) : (
+                              <>
+                                <span>Acknowledge Alert</span>
+                                <ArrowForwardIcon />
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {view.kind === "queue" && (
+          <DoctorQueue
+            department={view.department}
+            onOpenCase={(sessionId) => selectView({ kind: "case", sessionId, department: view.department })}
+          />
+        )}
+
+
+        {view.kind === "case" && (
+          <DoctorCase
+            sessionId={view.sessionId}
+            onBack={() => selectView({ kind: "queue", department: view.department })}
+            onEdit={() => selectView({ kind: "review", sessionId: view.sessionId, department: view.department })}
+          />
+        )}
+      </main>
+    </div>
+  );
 }
 
-function CaseStatus({ status }: { status: string }) {
-  if (status === "Confirmed") return <StatusBadge tone="success" icon="check">Confirmed</StatusBadge>;
-  if (status === "Review needed") return <StatusBadge tone="review">Review needed</StatusBadge>;
-  return <StatusBadge tone="neutral">Ready for review</StatusBadge>;
+function formatTime(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return d.toLocaleString();
 }
 
-function CaseDetail({ complaint, confirmed, editing, onComplaint, onEdit, onBack, onDocument, onConfirm }: { complaint: string; confirmed: boolean; editing: boolean; onComplaint: (value: string) => void; onEdit: () => void; onBack: () => void; onDocument: () => void; onConfirm: () => void }) {
-  return <main className="mk-doctor-page"><div className="mk-doctor-shell"><div className="mk-breadcrumb"><button type="button" onClick={onBack}><Icon className="mk-icon" name="arrow-left" />All cases</button><span>/</span><span>MK-DEMO-1042</span></div><header className="mk-doctor-header mk-doctor-header--detail"><div><div className="mk-title-line"><h1>Demo patient</h1><StatusBadge tone={confirmed ? "success" : "review"} icon={confirmed ? "check" : undefined}>{confirmed ? "Confirmed" : "Review needed"}</StatusBadge></div><p>MK-DEMO-1042 · Submitted today at 10:32 · Synthetic demo case</p></div><div className="mk-header-actions"><Button variant="secondary" onClick={onBack}>Back to list</Button><Button onClick={onConfirm} icon="check" disabled={confirmed}>{confirmed ? "Confirmed" : "Confirm case"}</Button></div></header>{confirmed ? <StateNotice title="Case confirmed" detail="The clinician review state is recorded for this demo case." tone="success" /> : null}<div className="mk-doctor-grid"><div className="mk-detail-main"><DoctorSection title="Patient context"><dl className="mk-patient-details"><div><dt>Age</dt><dd>32 years</dd></div><div><dt>Gender</dt><dd>Female</dd></div><div><dt>Language</dt><dd>English</dd></div></dl></DoctorSection><DoctorSection title="Chief complaint" action={<Button variant="quiet" onClick={onEdit} icon="edit">{editing ? "Save field" : "Edit"}</Button>}><div className="mk-field-review">{editing ? <><FieldLabel htmlFor="complaint">Patient statement</FieldLabel><Textarea id="complaint" value={complaint} onChange={(event) => onComplaint(event.target.value)} rows={3} /></> : <p className="mk-clinical-value">{complaint}</p>}<div className="mk-field-meta"><span>Source: patient response</span><span>Structured by: Gemini</span><ConfidenceIndicator state="high" /></div></div></DoctorSection><DoctorSection title="History of present illness"><div className="mk-history-grid"><ReviewField label="Onset" value="Yesterday evening" source="patient response" state="high" /><ReviewField label="Duration" value="Since yesterday" source="patient response" state="high" /><ReviewField label="Severity" value="Moderate" source="patient response" state="high" /><ReviewField label="Associated symptoms" value="Fever, fatigue" source="patient response" state="high" /></div></DoctorSection></div><aside className="mk-detail-side"><DoctorSection title="Documents"><button type="button" className="mk-document-link" onClick={onDocument}><span><Icon name="file" className="mk-icon" /><span><strong>Prescription image</strong><small>1 extraction requires review</small></span></span><Icon name="chevron-right" className="mk-icon" /></button></DoctorSection><DoctorSection title="Review status"><div className="mk-review-checklist"><span><Icon name="check" className="mk-icon" />Patient context reviewed</span><span><Icon name="check" className="mk-icon" />History recorded</span><span><Icon name="help" className="mk-icon" />Document extraction needs review</span></div></DoctorSection></aside></div></div></main>;
+function AlertIconBase({ children, className }: { children: ReactNode; className: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden="true">
+      {children}
+    </svg>
+  );
 }
 
-function DoctorSection({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) { return <Card className="mk-doctor-section"><div className="mk-section-heading"><h2>{title}</h2>{action}</div>{children}</Card>; }
+function WarningIcon() {
+  return (
+    <AlertIconBase className="mk-d04-warning-icon">
+      <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+      <line x1="12" y1="9" x2="12" y2="13" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </AlertIconBase>
+  );
+}
 
-function ReviewField({ label, value, source, state }: { label: string; value: string; source: string; state: "high" | "review" | "corrected" }) { return <div className="mk-review-field"><span>{label}</span><strong>{value}</strong><div><small>Source: {source}</small><ConfidenceIndicator state={state} /></div></div>; }
+function RefreshIcon() {
+  return (
+    <AlertIconBase className="mk-d04-refresh-icon">
+      <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+      <path d="M21 3v5h-5" />
+      <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+      <path d="M8 16H3v5" />
+    </AlertIconBase>
+  );
+}
 
-function DocumentReview({ onBack }: { onBack: () => void }) {
-  const [edited, setEdited] = useState(false);
-  return <main className="mk-doctor-page"><div className="mk-doctor-shell"><div className="mk-breadcrumb"><button type="button" onClick={onBack}><Icon className="mk-icon" name="arrow-left" />Case MK-DEMO-1042</button><span>/</span><span>Document review</span></div><header className="mk-doctor-header mk-doctor-header--detail"><div><p className="mk-eyebrow">Document review</p><h1>Prescription extraction</h1><p>Review the original document alongside the extracted information.</p></div><Button variant="secondary" onClick={onBack}>Return to case</Button></header><div className="mk-document-split"><Card className="mk-original-document"><div className="mk-document-canvas"><Icon className="mk-icon" name="file" /><p>Original prescription</p><span>Demo document preview</span></div></Card><Card className="mk-extraction-panel"><div className="mk-section-heading"><h2>Extracted information</h2><ConfidenceIndicator state={edited ? "corrected" : "review"} /></div><div className="mk-ocr-row"><div><span>Medicine</span><strong>{edited ? "Paracetamol" : "Paracetemol"}</strong><small>Original extraction: Paracetemol</small></div><Button variant="secondary" onClick={() => setEdited((value) => !value)} icon="edit">{edited ? "Undo" : "Correct"}</Button></div><div className="mk-ocr-row"><div><span>Strength</span><strong>500 mg</strong><small>Source: document extraction</small></div><ConfidenceIndicator state="high" /></div><div className="mk-ocr-row"><div><span>Frequency</span><strong>Twice daily</strong><small>Source: document extraction</small></div><ConfidenceIndicator state="high" /></div><StateNotice title="Review required" detail="Extraction confidence describes readability of the source document, not medical certainty." /></Card></div></div></main>;
+function CheckIcon() {
+  return (
+    <AlertIconBase className="mk-d04-ack-icon">
+      <path d="M20 6 9 17l-5-5" />
+    </AlertIconBase>
+  );
+}
+
+function ArrowForwardIcon() {
+  return (
+    <AlertIconBase className="mk-d04-ack-icon">
+      <path d="M5 12h14" />
+      <path d="m12 5 7 7-7 7" />
+    </AlertIconBase>
+  );
 }
