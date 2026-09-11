@@ -5,18 +5,28 @@ from backend.models.schema import Session
 from backend.db import get_session, save_session, list_sessions, list_flagged_sessions, list_queued_sessions
 from backend.services.documents import correct_document
 
-# ----- DEMO-LEVEL access guard (NOT production authentication) -----
-# Prevents unrestricted doctor/PII access from other devices on the LAN.
-# Only loopback clients (the kiosk host itself) may reach /doctor/*. This is a
-# demo-safe stopgap, not an auth system: it does not identify who is calling.
+import os
+
+# ----- Access guard (Production Token + Local Demo Loopback Fallback) -----
+# In production, DOCTOR_SECRET_TOKEN can be set to require 'X-Doctor-Token'.
+# In demo mode, loopback clients (the kiosk host itself) are allowed.
 _LOOPBACK_CLIENTS = {"127.0.0.1", "::1", "localhost", "testclient"}  # testclient = ASGI TestClient
 
-def require_loopback(request: Request) -> None:
+def require_doctor_access(request: Request) -> None:
+    secret_token = os.getenv("DOCTOR_SECRET_TOKEN", "").strip()
+    if secret_token:
+        provided = request.headers.get("X-Doctor-Token", "")
+        if provided != secret_token:
+            raise HTTPException(status_code=401, detail="Unauthorized doctor access token.")
+        return
+
     host = request.client.host if request.client else ""
     if host not in _LOOPBACK_CLIENTS:
         raise HTTPException(status_code=403, detail="Doctor workspace is local-only in this demo build.")
 
-router = APIRouter(prefix="/doctor", tags=["doctor"], dependencies=[Depends(require_loopback)])
+require_loopback = require_doctor_access
+
+router = APIRouter(prefix="/doctor", tags=["doctor"], dependencies=[Depends(require_doctor_access)])
 
 class SessionSummary(BaseModel):
     session_id: str

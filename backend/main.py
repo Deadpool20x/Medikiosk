@@ -10,13 +10,16 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+import logging
 from backend.models.schema import HealthResponse, ErrorResponse
-from backend.db import init_db
+from backend.db import init_db, get_db_connection
 from backend.routers import session, doctor
+
+logger = logging.getLogger("medikiosk")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Initialize SQLite tables on startup idempotently
+    # Initialize SQLite tables and performance indexes on startup idempotently
     init_db()
     yield
 
@@ -27,18 +30,25 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS with environment variable override and local fallback
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+if allowed_origins_env:
+    origins = [orig.strip() for orig in allowed_origins_env.split(",") if orig.strip()]
+else:
+    origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Exception handlers to prevent raw stack trace leakage to client
+# Exception handlers to prevent raw stack trace leakage to client while logging for observability
 @app.exception_handler(Exception)
 async def generic_exception_handler(request: Request, exc: Exception):
+    logger.error("Unhandled exception on %s %s: %s", request.method, request.url, exc, exc_info=True)
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content=ErrorResponse(
@@ -63,6 +73,17 @@ app.include_router(doctor.router)
 
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
+    # Verify active database connectivity
+    try:
+        conn = get_db_connection()
+        conn.execute("SELECT 1;").fetchone()
+        conn.close()
+    except Exception as e:
+        logger.error("Database health check probe failed: %s", e)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "degraded", "error": "Database connectivity failure"}
+        )
     return HealthResponse(status="ok")
 
 if __name__ == "__main__":

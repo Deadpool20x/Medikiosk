@@ -87,7 +87,7 @@ class PatientCodeResponse(BaseModel):
     patient_code: str
 
 class AnswerRequest(BaseModel):
-    answer: str
+    answer: str = Field(..., max_length=5000)
 
 class AnswerResponse(BaseModel):
     next_question: Optional[str]

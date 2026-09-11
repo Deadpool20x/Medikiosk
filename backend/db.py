@@ -10,12 +10,17 @@ DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), "data", "medikiosk.db"
 def get_db_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
     path = db_path or os.getenv("DATABASE_PATH", DEFAULT_DB_PATH)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-    conn = sqlite3.connect(path)
+    conn = sqlite3.connect(path, timeout=30.0, check_same_thread=False)
     conn.row_factory = sqlite3.Row
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")
+        conn.execute("PRAGMA busy_timeout = 30000;")
+    except Exception:
+        pass
     return conn
 
 def init_db(db_path: Optional[str] = None) -> None:
-    """Idempotently initialize SQLite database tables."""
+    """Idempotently initialize SQLite database tables and performance indexes."""
     conn = get_db_connection(db_path)
     try:
         with conn:
@@ -45,6 +50,10 @@ def init_db(db_path: Optional[str] = None) -> None:
                 );
             """)
             _migrate_sessions_table(conn)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_queue ON sessions(queue_token, safety_flagged);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_safety ON sessions(safety_flagged);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_dept ON sessions(department);")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_sessions_code ON sessions(patient_code);")
     finally:
         conn.close()
 

@@ -43,7 +43,7 @@ def clinical_text(session: Session) -> str:
         if val:
             parts.append(str(val))
     if hpi.associated_symptoms:
-        parts.extend(hpi.associated_symptoms)
+        parts.extend(str(s) for s in hpi.associated_symptoms if s is not None)
     for rec in session.answer_records:
         if rec.answer:
             parts.append(rec.answer)

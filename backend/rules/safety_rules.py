@@ -50,7 +50,7 @@ def structured_state_text(session: Session) -> str:
         if val:
             parts.append(str(val))
     if hpi.associated_symptoms:
-        parts.extend(hpi.associated_symptoms)
+        parts.extend(str(s) for s in hpi.associated_symptoms if s is not None)
     return " ".join(parts)
 
 def evaluate_safety(raw_answer: str, session: Session) -> SafetyResult:

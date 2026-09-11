@@ -1,10 +1,47 @@
-import { Patient, StartSessionResponse, ConsentResponse, PatientCodeResponse, AnswerResponse, SessionResponse, Session, EmergencyItem, UploadResponse, DocumentCorrectionRequest, TokenResponse, QueueItem, DoctorSessionPatch } from "./types";
+import {
+  Patient,
+  StartSessionResponse,
+  ConsentResponse,
+  PatientCodeResponse,
+  AnswerResponse,
+  SessionResponse,
+  Session,
+  EmergencyItem,
+  UploadResponse,
+  DocumentCorrectionRequest,
+  TokenResponse,
+  QueueItem,
+  DoctorSessionPatch,
+} from "./types";
 
 // Base URL is read safely from public env var with fallback
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export interface HealthCheckResponse {
   status: string;
+}
+
+/**
+ * Robust JSON response handler that extracts detailed clinical or validation error
+ * messages from FastAPI response payloads (e.g. detail, reason, error) instead of
+ * exposing raw opaque HTTP codes to the user.
+ */
+async function handleResponse<T>(response: Response, defaultMessage: string): Promise<T> {
+  if (!response.ok) {
+    let detail = `${defaultMessage}: HTTP ${response.status}`;
+    try {
+      const body = await response.json();
+      if (body?.detail) {
+        detail = typeof body.detail === "string" ? body.detail : (body.detail.reason || JSON.stringify(body.detail));
+      } else if (body?.error) {
+        detail = String(body.error);
+      }
+    } catch {
+      // keep fallback message
+    }
+    throw new Error(detail);
+  }
+  return response.json();
 }
 
 export async function checkBackendHealth(): Promise<HealthCheckResponse> {
@@ -16,14 +53,14 @@ export async function checkBackendHealth(): Promise<HealthCheckResponse> {
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    throw new Error(`Health check failed with HTTP status ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<HealthCheckResponse>(response, "Health check failed");
 }
 
-export async function startPatientSession(patient: Patient, language: string = "en", visit_type: string = "new"): Promise<StartSessionResponse> {
+export async function startPatientSession(
+  patient: Patient,
+  language: string = "en",
+  visit_type: string = "new"
+): Promise<StartSessionResponse> {
   const response = await fetch(`${API_BASE_URL}/session/start`, {
     method: "POST",
     headers: {
@@ -32,11 +69,7 @@ export async function startPatientSession(patient: Patient, language: string = "
     body: JSON.stringify({ patient, language, visit_type }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to start session: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<StartSessionResponse>(response, "Failed to start patient session");
 }
 
 export async function submitConsent(sessionId: string): Promise<ConsentResponse> {
@@ -48,11 +81,7 @@ export async function submitConsent(sessionId: string): Promise<ConsentResponse>
     body: JSON.stringify({ consent_given: true }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to submit consent: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<ConsentResponse>(response, "Failed to record consent");
 }
 
 export async function getPatientCode(sessionId: string): Promise<PatientCodeResponse> {
@@ -63,11 +92,7 @@ export async function getPatientCode(sessionId: string): Promise<PatientCodeResp
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to get patient code: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<PatientCodeResponse>(response, "Failed to generate patient code");
 }
 
 export async function submitAnswer(sessionId: string, answer: string): Promise<AnswerResponse> {
@@ -79,11 +104,7 @@ export async function submitAnswer(sessionId: string, answer: string): Promise<A
     body: JSON.stringify({ answer }),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to submit answer: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<AnswerResponse>(response, "Failed to submit interview answer");
 }
 
 export async function getEmergencySessions(): Promise<EmergencyItem[]> {
@@ -95,11 +116,7 @@ export async function getEmergencySessions(): Promise<EmergencyItem[]> {
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to get emergency sessions: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<EmergencyItem[]>(response, "Failed to load emergency dashboard");
 }
 
 export async function getSession(sessionId: string): Promise<SessionResponse> {
@@ -111,11 +128,7 @@ export async function getSession(sessionId: string): Promise<SessionResponse> {
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to get session: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<SessionResponse>(response, "Failed to retrieve intake session");
 }
 
 export async function completeDocumentIntake(sessionId: string): Promise<ConsentResponse> {
@@ -126,11 +139,7 @@ export async function completeDocumentIntake(sessionId: string): Promise<Consent
     },
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to record document step: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<ConsentResponse>(response, "Failed to finalize document step");
 }
 
 export async function uploadDocument(sessionId: string, file: File): Promise<UploadResponse> {
@@ -141,21 +150,14 @@ export async function uploadDocument(sessionId: string, file: File): Promise<Upl
     body: form,
   });
 
-  if (!response.ok) {
-    let detail = `Upload failed: HTTP ${response.status}`;
-    try {
-      const body = await response.json();
-      if (body.detail) detail = String(body.detail);
-    } catch {
-      // keep default message
-    }
-    throw new Error(detail);
-  }
-
-  return response.json();
+  return handleResponse<UploadResponse>(response, "Document upload failed");
 }
 
-export async function correctDocument(sessionId: string, index: number, payload: DocumentCorrectionRequest): Promise<SessionResponse> {
+export async function correctDocument(
+  sessionId: string,
+  index: number,
+  payload: DocumentCorrectionRequest
+): Promise<SessionResponse> {
   const response = await fetch(`${API_BASE_URL}/session/${sessionId}/document/${index}`, {
     method: "PATCH",
     headers: {
@@ -164,11 +166,7 @@ export async function correctDocument(sessionId: string, index: number, payload:
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to save correction: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<SessionResponse>(response, "Failed to save prescription correction");
 }
 
 export async function requestToken(sessionId: string): Promise<TokenResponse> {
@@ -179,15 +177,7 @@ export async function requestToken(sessionId: string): Promise<TokenResponse> {
     },
   });
 
-  if (response.status === 403) {
-    const body = await response.json();
-    throw new Error(body?.detail?.reason || `Token not available: HTTP ${response.status}`);
-  }
-  if (!response.ok) {
-    throw new Error(`Failed to issue token: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<TokenResponse>(response, "Failed to issue queue token");
 }
 
 export async function getDoctorQueue(department?: string): Promise<QueueItem[]> {
@@ -198,11 +188,7 @@ export async function getDoctorQueue(department?: string): Promise<QueueItem[]> 
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to load department queue: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<QueueItem[]>(response, "Failed to load department queue");
 }
 
 export async function getDoctorSession(sessionId: string): Promise<Session> {
@@ -212,11 +198,7 @@ export async function getDoctorSession(sessionId: string): Promise<Session> {
     cache: "no-store",
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to load case: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<Session>(response, "Failed to load clinical case detail");
 }
 
 export async function patchDoctorSession(sessionId: string, patch: DoctorSessionPatch): Promise<Session> {
@@ -226,23 +208,19 @@ export async function patchDoctorSession(sessionId: string, patch: DoctorSession
     body: JSON.stringify(patch),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to save case: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<Session>(response, "Failed to update clinical case");
 }
 
-export async function correctDoctorDocument(sessionId: string, index: number, payload: DocumentCorrectionRequest): Promise<Session> {
+export async function correctDoctorDocument(
+  sessionId: string,
+  index: number,
+  payload: DocumentCorrectionRequest
+): Promise<Session> {
   const response = await fetch(`${API_BASE_URL}/doctor/session/${sessionId}/document/${index}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
 
-  if (!response.ok) {
-    throw new Error(`Failed to save document correction: HTTP ${response.status}`);
-  }
-
-  return response.json();
+  return handleResponse<Session>(response, "Failed to save document correction");
 }

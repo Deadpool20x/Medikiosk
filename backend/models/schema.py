@@ -34,16 +34,16 @@ class DocumentField(BaseModel):
     raw_result: Optional[Dict[str, Any]] = Field(default=None)
 
 class HistoryOfPresentIllness(BaseModel):
-    onset: Optional[str] = Field(default=None)
-    duration: Optional[str] = Field(default=None)
-    character: Optional[str] = Field(default=None)
-    severity: Optional[str] = Field(default=None)
+    onset: Optional[str] = Field(default=None, max_length=1000)
+    duration: Optional[str] = Field(default=None, max_length=1000)
+    character: Optional[str] = Field(default=None, max_length=1000)
+    severity: Optional[str] = Field(default=None, max_length=1000)
     associated_symptoms: List[str] = Field(default_factory=list)
 
 class Patient(BaseModel):
-    name: str = Field(..., min_length=1)
+    name: str = Field(..., min_length=1, max_length=150)
     age: int = Field(..., ge=0, le=130)
-    gender: str = Field(..., min_length=1)
+    gender: str = Field(..., min_length=1, max_length=50)
 
 class DoctorReview(BaseModel):
     edited: bool = Field(default=False)
@@ -52,14 +52,14 @@ class DoctorReview(BaseModel):
 class Session(BaseModel):
     session_id: str
     patient: Patient
-    language: str = Field(default="en")
-    visit_type: str = Field(default="new")
+    language: str = Field(default="en", max_length=20)
+    visit_type: str = Field(default="new", max_length=30)
     consent_given: bool = Field(default=False)
-    patient_code: Optional[str] = Field(default=None)
-    interview_step: str = Field(default="chief_complaint")
+    patient_code: Optional[str] = Field(default=None, max_length=50)
+    interview_step: str = Field(default="chief_complaint", max_length=50)
     interview_complete: bool = Field(default=False)
     document_intake_done: bool = Field(default=False)
-    chief_complaint: Optional[str] = Field(default=None)
+    chief_complaint: Optional[str] = Field(default=None, max_length=2000)
     history_of_present_illness: HistoryOfPresentIllness = Field(default_factory=HistoryOfPresentIllness)
     documents: List[DocumentField] = Field(default_factory=list)
     doctor_review: DoctorReview = Field(default_factory=DoctorReview)

@@ -92,7 +92,7 @@ def evaluate_safety(raw_answer: str, session: Session) -> bool:
     Missing required fields are NOT a red flag — they are a workflow state.
     LLM extraction failure must never bypass this function.
     """
-    lower = raw_answer.lower()
+    lower = (raw_answer or "").lower()
     for phrase in _RED_FLAG_PHRASES:
         if phrase in lower:
             return False
