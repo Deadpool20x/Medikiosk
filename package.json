@@ -1,0 +1,8 @@
+{
+  "name": "medikiosk-scripts",
+  "private": true,
+  "description": "E2E verification and demo automation scripts for MediKiosk",
+  "dependencies": {
+    "playwright-core": "^1.63.0"
+  }
+}
