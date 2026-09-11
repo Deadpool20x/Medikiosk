@@ -1,159 +1,74 @@
 ---
 version: "alpha"
-revision: "2.1"
+revision: "3.0"
 name: "MediKiosk"
-description: "Agent-grade visual contract for the MediKiosk patient kiosk, doctor workspace, and document review UI."
+description: "Consumer-onboarding meets clinician-operations. Cal.com stepper + Intercom conversation + Airtable density."
 
 colors:
-  bg: "#F7F8FA"
-  surface: "#FFFFFF"
-  surface-subtle: "#F1F3F5"
-  border: "#E2E5E9"
-  border-strong: "#CDD2D8"
-  text: "#17191C"
-  text-secondary: "#5D636B"
-  text-muted: "#7A8088"
   primary: "#2563EB"
   primary-hover: "#1D4ED8"
   primary-soft: "#EFF6FF"
-  success: "#15803D"
-  success-soft: "#F0FDF4"
-  warning: "#B45309"
+  secondary: "#0F172A"
+  background: "#F0F9FF"
+  surface: "#FFFFFF"
+  border: "#E2E8F0"
+  text: "#0F172A"
+  text-secondary: "#475569"
+  success: "#10B981"
+  success-soft: "#ECFDF5"
+  warning: "#F59E0B"
   warning-soft: "#FFFBEB"
-  danger: "#B91C1C"
+  danger: "#EF4444"
   danger-soft: "#FEF2F2"
-  focus: "#2563EB"
 
 typography:
-  patient-question:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "32px"
-    fontWeight: 600
+  h1:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "2rem"
+    fontWeight: 700
     lineHeight: 1.2
-  patient-section:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "24px"
-    fontWeight: 600
-    lineHeight: 1.25
-  patient-body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "18px"
-    fontWeight: 400
+    letterSpacing: "-0.02em"
+  body:
+    fontFamily: "Inter, sans-serif"
+    fontSize: "1rem"
     lineHeight: 1.5
-  patient-button:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "18px"
-    fontWeight: 600
-    lineHeight: 1.2
-  patient-helper:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "15px"
-    fontWeight: 400
-    lineHeight: 1.45
-  doctor-title:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "24px"
-    fontWeight: 600
-    lineHeight: 1.25
-  doctor-section:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "16px"
-    fontWeight: 600
-    lineHeight: 1.35
-  doctor-body:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "14px"
-    fontWeight: 400
-    lineHeight: 1.45
-  doctor-label:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "12px"
-    fontWeight: 600
-    lineHeight: 1.3
-  doctor-meta:
-    fontFamily: "Inter, system-ui, sans-serif"
-    fontSize: "12px"
-    fontWeight: 400
-    lineHeight: 1.3
-
-rounded:
-  sm: "8px"
-  control: "10px"
-  card: "12px"
-  lg: "16px"
-  pill: "999px"
-
-spacing:
-  1: "4px"
-  2: "8px"
-  3: "12px"
-  4: "16px"
-  5: "20px"
-  6: "24px"
-  8: "32px"
-  10: "40px"
-  12: "48px"
-  16: "64px"
 
 components:
   button-primary:
     backgroundColor: "{colors.primary}"
-    textColor: "{colors.surface}"
-    typography: "{typography.patient-button}"
-    rounded: "{rounded.control}"
-    height: "48px"
-    padding: "0 20px"
-  button-primary-hover:
-    backgroundColor: "{colors.primary-hover}"
-    textColor: "{colors.surface}"
-  button-primary-focus:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.surface}"
-    border: "2px solid {colors.focus}"
-  button-primary-disabled:
-    backgroundColor: "{colors.border}"
-    textColor: "{colors.text-secondary}"
+    textColor: "#FFFFFF"
+    rounded: "12px"
+    padding: "12px 24px"
+    fontWeight: 600
   button-secondary:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.control}"
-    height: "48px"
-    padding: "0 20px"
-  input:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.control}"
-    height: "48px"
-    padding: "0 16px"
-  input-error:
-    backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.control}"
-    border: "1px solid {colors.danger}"
+    backgroundColor: "transparent"
+    textColor: "{colors.text-secondary}"
+    rounded: "12px"
+    padding: "12px 24px"
+    border: "1px solid {colors.border}"
   card:
     backgroundColor: "{colors.surface}"
-    textColor: "{colors.text}"
-    rounded: "{rounded.card}"
+    rounded: "16px"
+    shadow: "0 4px 6px -1px rgba(0, 0, 0, 0.1)"
     padding: "24px"
-  status-success:
-    backgroundColor: "{colors.success-soft}"
-    textColor: "{colors.success}"
-    rounded: "{rounded.pill}"
-  status-warning:
-    backgroundColor: "{colors.warning-soft}"
-    textColor: "{colors.warning}"
-    rounded: "{rounded.pill}"
-  status-danger:
-    backgroundColor: "{colors.danger-soft}"
-    textColor: "{colors.danger}"
-    rounded: "{rounded.pill}"
-  status-review:
-    backgroundColor: "{colors.warning-soft}"
-    textColor: "{colors.warning}"
-    rounded: "{rounded.pill}"
+  input:
+    backgroundColor: "{colors.surface}"
+    border: "1px solid {colors.border}"
+    rounded: "12px"
+    padding: "12px"
+  stepper:
+    backgroundColor: "{colors.primary-soft}"
+    textColor: "{colors.primary}"
+    activeBackgroundColor: "{colors.primary}"
+    activeTextColor: "#FFFFFF"
+  status-pill:
+    rounded: "9999px"
+    padding: "4px 12px"
+    fontSize: "0.875rem"
+    fontWeight: 500
 ---
 
-# MediKiosk — Agent-Grade Design Contract
+# MediKiosk — Agent-Grade Design Contract v3.0
 
 ## 1. Overview
 
@@ -163,8 +78,8 @@ This file is the **visual source of truth** for UI work.
 
 The product has three surfaces:
 
-1. Patient kiosk
-2. Doctor workspace
+1. Patient kiosk (Conversational, Cal.com-style stepper)
+2. Doctor workspace (Airtable/Linear-style density)
 3. Document/OCR review
 
 The surfaces must look like one product.
@@ -216,7 +131,7 @@ The visual system is a synthesis, not a copy.
 Use for:
 
 - restrained control hierarchy
-- clear progression
+- clear progression (stepper)
 - whitespace
 - simple action surfaces
 - practical form layout
@@ -231,6 +146,7 @@ Use for:
 - message hierarchy
 - short prompts
 - clear response/action relationship
+- friendly avatar/illustration usage
 
 Do not turn MediKiosk into a customer-support chat clone.
 
@@ -255,16 +171,6 @@ Use for:
 - compact doctor-side controls
 
 Do not require Linear's dark visual treatment.
-
-### Notion influence
-
-Use only for:
-
-- calm workspace surfaces
-- restrained information hierarchy
-- quiet visual rhythm
-
-Do not treat Notion as the conversational reference.
 
 ### Evidence rule
 
@@ -300,24 +206,21 @@ Implementation should expose the design tokens as CSS custom properties:
 
 ```css
 :root {
-  --mk-bg: #F7F8FA;
-  --mk-surface: #FFFFFF;
-  --mk-surface-subtle: #F1F3F5;
-  --mk-border: #E2E5E9;
-  --mk-border-strong: #CDD2D8;
-  --mk-text: #17191C;
-  --mk-text-secondary: #5D636B;
-  --mk-text-muted: #7A8088;
   --mk-primary: #2563EB;
   --mk-primary-hover: #1D4ED8;
   --mk-primary-soft: #EFF6FF;
-  --mk-success: #15803D;
-  --mk-success-soft: #F0FDF4;
-  --mk-warning: #B45309;
+  --mk-secondary: #0F172A;
+  --mk-background: #F0F9FF;
+  --mk-surface: #FFFFFF;
+  --mk-border: #E2E8F0;
+  --mk-text: #0F172A;
+  --mk-text-secondary: #475569;
+  --mk-success: #10B981;
+  --mk-success-soft: #ECFDF5;
+  --mk-warning: #F59E0B;
   --mk-warning-soft: #FFFBEB;
-  --mk-danger: #B91C1C;
+  --mk-danger: #EF4444;
   --mk-danger-soft: #FEF2F2;
-  --mk-focus: #2563EB;
 }
 ```
 
@@ -483,9 +386,8 @@ Metadata:
 
 ```text
 8px   small
-10px  controls
-12px  cards
-16px  large containers
+12px  controls
+16px  cards
 999px status pills
 ```
 
@@ -500,8 +402,8 @@ prefer border + surface contrast
 Cards:
 
 ```text
-border: 1px solid #E2E5E9
-shadow: none or extremely subtle
+border: 1px solid #E2E8F0
+shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1)
 ```
 
 Do not use floating-card stacks.
@@ -952,6 +854,16 @@ Do not invent screens that make these features appear implemented.
 
 ## 18. Design Decisions
 
+### v3.0
+
+Decision:
+
+Adopt a "Consumer-onboarding meets clinician-operations" aesthetic.
+
+Reason:
+
+The vision analysis confirmed the need for a Cal.com-style stepper for patients and an Airtable/Linear-style dashboard for doctors, unified by a soft healthcare-blue palette.
+
 ### v2.1
 
 Decision:
@@ -1121,4 +1033,3 @@ When a real design decision changes:
 7. compare the design diff
 
 Never silently modify the implementation while leaving DESIGN.md stale.
-

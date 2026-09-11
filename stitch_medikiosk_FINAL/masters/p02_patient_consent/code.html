@@ -1,0 +1,159 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>MediKiosk — Patient Consent</title>
+<!-- Tailwind CSS v3 CDN with forms & container queries plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style data-purpose="typography">
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap');
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .font-mono-eyebrow {
+      font-family: 'JetBrains Mono', monospace;
+    }
+  </style>
+<style data-purpose="custom-layout">
+    /* Subtle background tone matching kiosk foundation */
+    .kiosk-bg {
+      background-color: #fbfbfb;
+    }
+  </style>
+</head>
+<body class="kiosk-bg text-neutral-900 min-h-screen flex flex-col antialiased">
+<!-- BEGIN: TopNavigationHeader -->
+<header class="w-full border-b border-neutral-200/80 bg-white/70 backdrop-blur-sm sticky top-0 z-50">
+<div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+<!-- Brand Logo & Name -->
+<div class="flex items-center space-x-2.5">
+<div class="w-7 h-7 bg-neutral-950 rounded-md flex items-center justify-center text-white font-bold text-base shadow-sm">
+<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="3" viewBox="0 0 24 24">
+<line x1="12" x2="12" y1="5" y2="19"></line>
+<line x1="5" x2="19" y1="12" y2="12"></line>
+</svg>
+</div>
+<div class="flex items-baseline">
+<span class="font-bold tracking-tight text-base text-neutral-950">MediKiosk</span>
+<span class="text-[9px] font-semibold uppercase tracking-wider text-neutral-400 ml-0.5">OPD</span>
+</div>
+</div>
+<!-- Kiosk Progress Stepper -->
+<nav aria-label="Progress" class="hidden md:flex items-center space-x-1.5 text-xs text-neutral-500 font-medium">
+<!-- Step 1: Language (Completed) -->
+<span class="px-2.5 py-1 text-neutral-600 font-normal">Language</span>
+<!-- Step 2: Consent (Active State - Black Pill) -->
+<span class="px-3.5 py-1 bg-neutral-950 text-white rounded-full font-semibold shadow-xs">Consent</span>
+<!-- Step 3: Patient Code -->
+<span class="px-2.5 py-1 text-neutral-400 font-normal">Patient Code</span>
+<!-- Step 4: Interview -->
+<span class="px-2.5 py-1 text-neutral-400 font-normal">Interview</span>
+<!-- Step 5: Records -->
+<span class="px-2.5 py-1 text-neutral-400 font-normal">Records</span>
+<!-- Step 6: Summary -->
+<span class="px-2.5 py-1 text-neutral-400 font-normal">Summary</span>
+<!-- Step 7: Token -->
+<span class="px-2.5 py-1 text-neutral-400 font-normal">Token</span>
+</nav>
+<!-- Right Alignment Placeholder for Balanced Navbar -->
+<div class="w-16 hidden md:block"></div>
+</div>
+</header>
+<!-- END: TopNavigationHeader -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 max-w-4xl w-full mx-auto px-6 pt-12 pb-20 flex flex-col justify-start">
+<!-- Title & Eyebrow Section -->
+<div class="mb-8 max-w-2xl text-left">
+<span class="font-mono-eyebrow text-xs uppercase tracking-widest text-neutral-500 font-medium block mb-2">
+        CONSENT &amp; PRIVACY
+      </span>
+<h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-neutral-950 mb-3">
+        Patient Consent
+      </h1>
+<p class="text-neutral-600 text-base sm:text-lg leading-relaxed font-normal">
+        Please review and agree to the consent details below before proceeding with your intake session.
+      </p>
+</div>
+<!-- Central Card Container -->
+<div class="w-full bg-white border border-neutral-200/90 rounded-2xl p-6 sm:p-10 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.03)] space-y-6">
+<!-- Key Consent Informational Cards -->
+<div class="space-y-3.5">
+<!-- Point 1 -->
+<div class="border border-neutral-200/80 bg-neutral-50/50 rounded-xl p-4 sm:p-5 flex items-start gap-4">
+<div class="w-7 h-7 rounded-lg bg-neutral-900/5 flex items-center justify-center text-neutral-800 shrink-0 mt-0.5">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L18 8.5V19a2 2 0 01-2 2z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div class="space-y-1">
+<h2 class="text-sm font-semibold text-neutral-950">Assisting Your Consultation</h2>
+<p class="text-xs sm:text-sm text-neutral-600 leading-relaxed">
+              MediKiosk records your health symptoms and Ayurvedic lifestyle history so your Vaidya (doctor) has a clear summary ready before your consultation.
+            </p>
+</div>
+</div>
+<!-- Point 2 -->
+<div class="border border-neutral-200/80 bg-neutral-50/50 rounded-xl p-4 sm:p-5 flex items-start gap-4">
+<div class="w-7 h-7 rounded-lg bg-neutral-900/5 flex items-center justify-center text-neutral-800 shrink-0 mt-0.5">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div class="space-y-1">
+<h2 class="text-sm font-semibold text-neutral-950">Your information</h2>
+<p class="text-xs sm:text-sm text-neutral-600 leading-relaxed">Your responses and health records will be available to your treating doctor as part of your consultation.</p>
+</div>
+</div>
+<!-- Point 3 -->
+<div class="border border-neutral-200/80 bg-neutral-50/50 rounded-xl p-4 sm:p-5 flex items-start gap-4">
+<div class="w-7 h-7 rounded-lg bg-neutral-900/5 flex items-center justify-center text-neutral-800 shrink-0 mt-0.5">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+<div class="space-y-1">
+<h2 class="text-sm font-semibold text-neutral-950">Doctor Makes All Decisions</h2>
+<p class="text-xs sm:text-sm text-neutral-600 leading-relaxed">
+              MediKiosk helps organize your medical history. It does not diagnose, prescribe medication, or replace doctor advice.
+            </p>
+</div>
+</div>
+</div>
+<!-- Agreement Card / Interactive Checkbox Box -->
+<div class="pt-2" data-purpose="consent-agreement-card">
+<label class="relative flex items-center justify-between p-4 sm:p-5 border-2 border-neutral-950 rounded-xl bg-white cursor-pointer shadow-xs transition-all hover:bg-neutral-50/60">
+<div class="flex items-center space-x-3.5 pr-4">
+<input checked="" class="w-5 h-5 rounded text-neutral-950 focus:ring-neutral-950 border-neutral-400" id="consent-agreement" type="checkbox">
+<span class="text-sm font-medium text-neutral-950 select-none leading-snug">
+              I understand and agree to share my symptom and health history for this pre-consultation intake.
+            </span>
+</div>
+<div class="w-6 h-6 rounded-full bg-neutral-950 text-white flex items-center justify-center shrink-0">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</div>
+</label>
+</div>
+<!-- Bottom Action Row -->
+<div class="pt-4 flex flex-col-reverse sm:flex-row items-center justify-between gap-3 border-t border-neutral-100 mt-6">
+<button class="w-full sm:w-auto px-6 py-3.5 rounded-xl border border-neutral-300 text-sm font-medium text-neutral-700 hover:bg-neutral-100/70 hover:text-neutral-900 transition-colors focus:outline-hidden" type="button">
+          ← Back
+        </button>
+<button class="w-full sm:w-auto px-8 py-3.5 bg-neutral-950 text-white rounded-xl text-sm font-medium hover:bg-neutral-900 transition-colors shadow-sm flex items-center justify-center gap-2 focus:outline-hidden" type="button">
+<span class="">Agree &amp; Continue</span>
+<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+</div>
+</div>
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: KioskFooter -->
+<footer class="w-full border-t border-neutral-200/60 py-6 text-center text-xs text-neutral-400">
+<p class="">MediKiosk OPD Assistant • MediKiosk Patient Intake</p>
+</footer>
+<!-- END: KioskFooter -->
+
+
+</body></html>

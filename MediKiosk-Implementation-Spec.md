@@ -36,6 +36,7 @@ Team: 6 members; solo technical build. Timeline: 1 week to a working demo for th
 
 - Patient interview: text input, chief complaint → history of present illness → basic history, using a fixed required-field rule set (Section 9).
 - LLM-based structured extraction of patient answers into JSON (Section 8).
+- **Deterministic red-flag/emergency escalation engine** — runs on raw patient answer text and structured session state, implemented in `rules/interview_rules.py`, purely rule-based, no LLM involvement (Section 8.1).
 - Document upload → OCR extraction of medicine name/strength/dose/frequency → confidence scoring → manual correction step for low-confidence fields.
 - Doctor dashboard: view structured case, see per-field confidence/source, edit any field, mark case "confirmed."
 - Voice input as a stretch feature only (Day 5, conditional — Section 13).
@@ -43,7 +44,6 @@ Team: 6 members; solo technical build. Timeline: 1 week to a working demo for th
 ## 2.2 Out of Scope (do not build; roadmap/vision only)
 
 - Real ABDM integration (HIP/HIU registration, consent manager, certification)
-- Deterministic red-flag/emergency escalation engine
 - Full AYUSH Prakriti scoring model
 - FHIR export, consent workflow, audit logging as running code
 - Multi-device concurrent session support
@@ -94,7 +94,7 @@ medikiosk/
 │   │   ├── ocr_provider.py    # Gemini Vision/Groq abstraction
 │   │   └── speech_provider.py # Sarvam/Groq-Whisper abstraction (stretch)
 │   ├── rules/
-│   │   └── interview_rules.py # required-field state machine (Section 9)
+│   │   └── interview_rules.py # required-field state machine + safety screening (Section 9)
 │   └── db.py                  # SQLite access layer
 ├── data/
 │   └── synthetic_patients.json
@@ -107,8 +107,14 @@ medikiosk/
 
 ```python
 # backend/models/schema.py
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, Literal
+from datetime import datetime
+
+class AnswerRecord(BaseModel):
+    question: str
+    answer: str
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 class DocumentField(BaseModel):
     type: Literal["prescription", "lab_report", "other"]
@@ -117,14 +123,14 @@ class DocumentField(BaseModel):
     source: Literal["ocr", "voice", "manual"]
     provider: Literal["gemini", "groq", "sarvam"]
     needs_review: bool
-    manually_corrected: bool = False
+    manually_corrected: bool = Field(default=False)
 
 class HistoryOfPresentIllness(BaseModel):
-    onset: Optional[str] = None
-    duration: Optional[str] = None
-    character: Optional[str] = None
-    severity: Optional[str] = None
-    associated_symptoms: list[str] = []
+    onset: Optional[str] = Field(default=None)
+    duration: Optional[str] = Field(default=None)
+    character: Optional[str] = Field(default=None)
+    severity: Optional[str] = Field(default=None)
+    associated_symptoms: list[str] = Field(default_factory=list)
 
 class Patient(BaseModel):
     name: str
@@ -132,20 +138,27 @@ class Patient(BaseModel):
     gender: str
 
 class DoctorReview(BaseModel):
-    edited: bool = False
-    confirmed: bool = False
+    edited: bool = Field(default=False)
+    confirmed: bool = Field(default=False)
 
 class Session(BaseModel):
     session_id: str
     patient: Patient
-    chief_complaint: Optional[str] = None
-    history_of_present_illness: HistoryOfPresentIllness = HistoryOfPresentIllness()
-    documents: list[DocumentField] = []
-    doctor_review: DoctorReview = DoctorReview()
+    chief_complaint: Optional[str] = Field(default=None)
+    history_of_present_illness: HistoryOfPresentIllness = Field(default_factory=HistoryOfPresentIllness)
+    documents: list[DocumentField] = Field(default_factory=list)
+    doctor_review: DoctorReview = Field(default_factory=DoctorReview)
+    answer_records: list[AnswerRecord] = Field(default_factory=list)
 ```
 
 ```typescript
 // frontend/lib/types.ts
+export interface AnswerRecord {
+  question: string;
+  answer: string;
+  timestamp: string;
+}
+
 export interface DocumentField {
   type: "prescription" | "lab_report" | "other";
   extracted_value: string | null;
@@ -169,10 +182,13 @@ export interface Session {
   };
   documents: DocumentField[];
   doctor_review: { edited: boolean; confirmed: boolean };
+  answer_records: AnswerRecord[];
 }
 ```
 
 **Rule (research-backed, R4/Section 12):** never overwrite `extracted_value` from `manual` correction back into the AI-derived field — store the manual correction as its own entry with `source: "manual"`, keep the original AI-derived entry intact for auditability.
+
+**SQLite persistence (Section 5):** `answer_records` is stored as a persistent field in the SQLite `sessions` table (e.g., JSON text or a `answers` table with FK to `sessions.session_id`). Both the save path (`/session/{id}/answer`) and the load path (`/doctor/session/{id}` GET, session resume) must round-trip this field verbatim. Every answer submitted by the patient appends a new `AnswerRecord`; the session is never allowed to lose or overwrite an existing record.
 
 ---
 
@@ -180,13 +196,23 @@ export interface Session {
 
 | Endpoint | Method | Request body | Response body |
 |---|---|---|---|
-| `/session/start` | POST | `{ "patient": { "name": str, "age": int, "gender": str } }` | `{ "session_id": str, "next_question": str }` |
+| `/session/start` | POST | `{ "patient": { "name": str, "age": int, "gender": str }, "language": str, "visit_type": str }` | `{ "session_id": str }` **only** (no patient_code) |
 | `/session/{id}/answer` | POST | `{ "answer": str }` | `{ "next_question": str \| null, "session_complete": bool }` |
 | `/session/{id}/upload` | POST | multipart image file | `{ "extracted_value": str \| null, "confidence": float, "needs_review": bool }` |
+| `/session/{id}/consent` | POST | `{ "consent_given": bool }` | `{ "status": str, "detail": str }` — `200` on repeat valid call, never `403` |
 | `/session/{id}/status` | GET | — | `{ "ready_for_review": bool }` |
+| `/session/{id}/token` | POST | — | `{ "token": str, "department": str }` **or** `{ "error": str, "reason": str }` — returns a queue token only if the session is **completed and safety‑clear** |
 | `/doctor/sessions` | GET | — | `[{ "session_id": str, "patient_name": str, "ready_for_review": bool }]` |
 | `/doctor/session/{id}` | GET | — | full `Session` object (Section 5) |
 | `/doctor/session/{id}` | PATCH | partial `Session` fields to update | updated `Session` object |
+
+**Token eligibility rule (server‑side enforcement):**
+A session may receive a normal queue token **only if**:
+* All required interview fields are present (`session_complete == true` from `/answer` endpoint),
+* No document field has `needs_review: true` (i.e., OCR confidence ≥ 0.5 or manual correction applied), and
+* The deterministic safety screening (Section 8.1) evaluated both the raw patient answer text and the structured session state and returned **no red‑flag** (safety‑clear).
+
+If any of the three conditions fails, the `/session/{id}/token` endpoint must return `403` with an error such as `"incomplete_session"`, `"pending_review"`, or `"safety_flagged"` — **never** issue a token or place the session in the normal doctor queue. Safety‑flagged sessions are routed exclusively to an emergency/red‑flag operational view (out of scope for token issuance).
 
 **Error format (all endpoints):** `{ "error": str, "retryable": bool }` — the frontend must never display raw stack traces to the patient (NFR3, Section 2).
 
@@ -194,18 +220,29 @@ export interface Session {
 
 # 7. LLM PROMPT TEMPLATES (exact — do not paraphrase when implementing)
 
-## 7.1 Structured extraction from patient answer
+## 7.1 Structured extraction from patient answer (field-specific)
+
+The prompt must reference the schema for the **current interview field only** (Section 9.1). The implementation must inject the schema dynamically based on the field being answered:
 
 ```
 System: You are extracting structured medical intake data. Return ONLY valid JSON
-matching this schema: {"onset": string|null, "duration": string|null,
-"character": string|null, "severity": string|null, "associated_symptoms": string[]}.
+matching this schema: {current_field_schema}.
 Do not add fields not in this schema. If a field is not mentioned in the patient's
 answer, return null for it — do not guess or infer a value the patient did not state.
 Do not include any diagnosis, treatment suggestion, or clinical judgment in your response.
 
 User: "{patient_answer_text}"
 ```
+
+Where `current_field_schema` is one of:
+- `{"complaint": string}` (for `chief_complaint`)
+- `{"onset": string|null}` (for `onset`)
+- `{"duration": string|null}` (for `duration`)
+- `{"character": string|null}` (for `character`)
+- `{"severity": string|null}` (for `severity`)
+- `{"associated_symptoms": string[]}` (for `associated_symptoms`)
+
+This field-specific approach prevents cross-field contamination (e.g., returning onset data when extracting a severity answer).
 
 ## 7.2 OCR / document extraction
 
@@ -243,11 +280,36 @@ Input: {structured_json}
 | Allowed | Not allowed |
 |---|---|
 | Phrase a question naturally | Decide which fields are mandatory (owned by `rules/interview_rules.py`) |
-| Interpret free text into structured fields | Decide if a symptom is a red flag (out of scope entirely, Section 2.2) |
+| Interpret free text into structured fields | Decide if a symptom is a red flag (deterministic engine owns this, Section 8.1) |
 | Extract text/entities from a document image | Decide OCR confidence is "good enough" (fixed threshold in code decides, not the LLM) |
 | Generate a physician-readable summary from structured data | Suggest a diagnosis or treatment (never, under any prompt) |
 
 Enforced by: Pydantic schema validation on every LLM/OCR response (Section 5) — a response that fails validation is retried once, then flagged `needs_review: true`, never accepted as-is.
+
+## 8.1 Deterministic safety screening
+
+Safety screening is **deterministic and operates on two independent inputs**:
+
+1. **Raw patient answer text** — the verbatim string submitted by the patient at `/session/{id}/answer`.
+2. **Structured session state** — the current `Session` object, including accumulated `answer_records`, `chief_complaint`, `history_of_present_illness`, `documents`, etc.
+
+**Red-flag detection is P0 product scope** — it must be implemented as a deterministic rules engine **outside the LLM**. The LLM is explicitly forbidden from making red-flag decisions (Section 2.2: deterministic red-flag engine is IN scope, but LLM must not decide clinical workflow). All red-flag logic must reside in `rules/interview_rules.py` and be purely rule-based.
+
+The screening function signature is:
+```python
+def evaluate_safety(raw_answer: str, session: Session) -> bool:
+    """
+    Returns True if safety conditions are met (no red flags detected).
+    Evaluates BOTH raw patient answer text AND structured session state.
+    Must be purely deterministic — no LLM involvement in decision.
+    """
+```
+
+The screening rules engine (Section 9, `rules/interview_rules.py`) evaluates **both inputs** on every call via this function.
+
+**Critical invariant — LLM extraction failure must never bypass red-flag detection.** If the LLM/OCR response fails schema validation and cannot be parsed, the system must still run the deterministic safety screen against the **raw patient answer text** (not the unparseable structured output). The screening rules operate on the raw text regardless of whether extraction succeeded. No code path exists where an LLM/OCR failure prevents safety screening from executing. The session proceeds with `needs_review: true` and the safety screen result appended to the session state.
+
+**Important clarification on red-flag conditions:** Missing required interview fields **must not** trigger a red-flag emergency classification. Incomplete fields remain a workflow state that prevents token issuance (Section 6) but does not constitute a medical emergency. Red-flag conditions are strictly limited to clinically significant findings such as chest pain, difficulty breathing, severe bleeding, neurological deficits, etc. (to be implemented per Section 2.1).
 
 ---
 
@@ -270,9 +332,40 @@ def get_next_question(session: Session) -> Optional[str]:
         if get_field_value(session, field) is None:
             return QUESTION_BANK[field]
     return None  # all required fields collected — interview complete
+
+def evaluate_safety(raw_answer: str, session: Session) -> bool:
+    """
+    Returns True if safety conditions are met (no red flags detected).
+    Evaluates BOTH raw patient answer text AND structured session state.
+    Must be purely deterministic — no LLM involvement in decision.
+    """
+    # Red-flag conditions (strictly clinical, implemented per Section 2.1):
+    # - Chest pain
+    # - Difficulty breathing
+    # - Severe bleeding
+    # - Neurological deficits
+    # - Other clinically significant findings
+    #
+    # IMPORTANT: Missing required interview fields are NOT a red-flag condition.
+    # Incomplete fields remain a workflow state that prevents token issuance
+    # (Section 6) but does not constitute a medical emergency.
+    return True  # Placeholder — implement concrete rules per Section 2.1
 ```
 
 The question bank (`QUESTION_BANK`) is a fixed dictionary of natural-language question templates per field — not generated freely by the LLM per Section 8.
+
+## 9.1 Field-specific LLM extraction schema
+
+The LLM extraction schema is **field-specific**: the current interview field determines the allowed extraction schema. The prompt must reference the schema for the current field only:
+
+- `chief_complaint` → schema: `{"complaint": string}`
+- `onset` → schema: `{"onset": string|null}`
+- `duration` → schema: `{"duration": string|null}`
+- `character` → schema: `{"character": string|null}`
+- `severity` → schema: `{"severity": string|null}`
+- `associated_symptoms` → schema: `{"associated_symptoms": string[]}`
+
+The LLM must never return fields not in the schema for the current field. This prevents cross-field contamination (e.g., returning onset data when extracting a severity answer).
 
 ---
 
@@ -319,8 +412,8 @@ The question bank (`QUESTION_BANK`) is a fixed dictionary of natural-language qu
 | Day | Deliverable | End-of-day check |
 |---|---|---|
 | 1 | Repo scaffolding (Section 4), `.env` with placeholder keys, synthetic patient data file, Gemini/Groq provider abstraction working with a test call. Spot-check both on 5 sample prescription images. | Can call Gemini and Groq from the backend and get a valid JSON response |
-| 2 | `/session/start` and `/session/{id}/answer` working end to end: patient answers text, gets next question, per Section 9 rules and Section 7.1 prompt. | A synthetic patient can complete the full text interview via API calls |
-| 3 | Doctor dashboard: `/doctor/sessions`, `/doctor/session/{id}` GET/PATCH, frontend rendering the structured case with per-field confidence/source. | A completed session is visible and editable in the doctor dashboard |
+| 2 | `/session/start` and `/session/{id}/answer` working end to end: patient answers text, gets next question, per Section 9 rules and Section 7.1 prompt. Deterministic safety screen on raw answer + session. | A synthetic patient can complete the full text interview via API calls |
+| 3 | Doctor dashboard: `/doctor/sessions`, `/doctor/session/{id}` GET/PATCH, frontend rendering the structured case with per-field confidence/source. `/session/{id}/consent` idempotent. | A completed session is visible and editable in the doctor dashboard |
 | 4 | `/session/{id}/upload` working: image in, OCR extraction out, confidence-gated, manual correction UI. | Uploading a real sample prescription produces a stored, correctly-flagged `DocumentField` |
 | 5 | (Stretch, conditional) Voice input via Sarvam/Groq-Whisper, with [Speak Again]/[Type Answer] fallback. If quality is unusable after testing, skip and mark this row not done. | Either voice works with fallback, or it's cleanly absent — no half-working voice path |
 | 6 | End-to-end pass with 5-10 synthetic patients through the full flow; fix breakage found. | Full flow runs without a manual restart, 5 times in a row |
@@ -337,8 +430,18 @@ The question bank (`QUESTION_BANK`) is a fixed dictionary of natural-language qu
 - Session interrupted mid-way, browser refreshed — session resumes, not lost
 - Blurry, upside-down, or multi-medicine prescription image
 - Gemini timeout/invalid JSON → Groq fallback actually triggers
-- OCR confidence below threshold → `needs_review` flag actually appears in the dashboard
+- OCR confidence below threshold → `needs_review` flag appears in the dashboard
 - (If voice built) background noise, non-English/code-mixed speech, silence
+- `/session/start` returns only `session_id` — no patient_code
+- `/session/{id}/consent` is idempotent — repeat valid calls return 200, never 403
+- Deterministic safety screen evaluates raw answer text even when LLM extraction fails
+- Safety function accepts both `raw_answer` and `Session` (Section 8.1 signature)
+- Incomplete interview fields do not trigger red-flag emergency classification
+- Field-specific LLM extraction returns only the schema for the current field
+- `/session/{id}/token` returns 403 with proper error reason for incomplete, pending-review, or safety-flagged sessions
+- `answer_records` round-trips through SQLite save/load and doctor dashboard GET
+- Pydantic defaults use `Field(default_factory=...)` — no mutable defaults
+- All endpoints, data model, interview state machine, safety section, tests, and DoD use the same contracts with no contradictions
 
 ---
 
@@ -348,6 +451,16 @@ The question bank (`QUESTION_BANK`) is a fixed dictionary of natural-language qu
 - [ ] Structured JSON is produced and schema-validated for every session
 - [ ] Doctor dashboard shows every field with confidence/source, and is editable
 - [ ] Document upload → OCR → confidence-gated extraction works on real sample images
-- [ ] All Section 14 failure cases handled without a crash or raw error
+- [ ] All Section 14 failure cases handled without a crash or raw error shown
 - [ ] Nothing from Section 2.2 (out of scope) has been built
 - [ ] No real patient data has touched Gemini's free tier at any point
+- [ ] `/session/start` contract restored: returns `session_id` only, no patient_code
+- [ ] `/session/{id}/consent` idempotent — repeat valid calls return 200, never 403
+- [ ] Deterministic safety screen evaluates raw answer text and `Session` object
+- [ ] Safety function signature: `evaluate_safety(raw_answer: str, session: Session) -> bool`
+- [ ] Incomplete interview fields do NOT trigger red-flag emergency classification
+- [ ] LLM extraction is field-specific: schema matches current interview field only
+- [ ] `/session/{id}/token` returns 403 with proper error reason for incomplete, pending-review, or safety-flagged sessions
+- [ ] `answer_records` round-trips through SQLite save/load and doctor dashboard GET
+- [ ] All Pydantic defaults use `Field(default_factory=...)` — no mutable defaults
+- [ ] API, data model, interview state machine, safety section, tests, and DoD all use the same contracts with no contradictions

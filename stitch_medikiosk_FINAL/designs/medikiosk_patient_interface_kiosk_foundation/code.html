@@ -1,0 +1,174 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            surface: '#ffffff',
+            'surface-soft': '#f8f9fa',
+            'surface-card': '#f9fafb',
+            ink: '#111111',
+            muted: '#6b7280',
+            body: '#4b5563',
+            border: '#e5e7eb',
+          }
+        }
+      }
+    }
+  </script>
+<style>
+    @layer base {
+      html, body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+      }
+      body {
+        overscroll-behavior: none;
+        -webkit-font-smoothing: antialiased;
+      }
+    }
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 450, 'GRAD' 0, 'opsz' 24;
+    }
+    .material-symbols-outlined.fill-current {
+      font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0, 'opsz' 24;
+    }
+  </style>
+</head>
+<body class="bg-surface-soft text-ink min-h-screen flex flex-col justify-between selection:bg-gray-200">
+<!-- Top Navigation Header (Persistent Shell) -->
+<header class="h-20 bg-white border-b border-border sticky top-0 z-50 px-6 lg:px-12 flex items-center justify-between">
+<!-- Brand & Location Badge -->
+<div class="flex items-center gap-3">
+<div class="flex items-center">
+<img alt="MediKiosk Logo" class="h-9 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1XbS6xIrr9U1xaL14veTt8gcGgZxNgstvEr-avQl36KqHn2Ub9Oa1d_AzSKphPfHUKd5tuJlrzMOg2bsN0zc30GZB1OqVsgKotMOmDbrmF0Nd0Yg_WlCGif__6PcjEH2LshZU6QpXMvYZFFoa8UySUm8n9z89Ry_szmvq89hmZOBaj2zFIIy_-_xwosjHXC46v4Xxkn4Y8BfO_xNrMaNEDLzGQLw6bSecgQRY-j6WmPe8rcwZtw2UNjOHN3">
+</div>
+
+</div>
+<!-- Step Progress Pills -->
+<nav class="hidden md:flex items-center gap-1.5 p-1 bg-gray-100/90 rounded-full border border-gray-200/80"><div class="px-3.5 py-1.5 rounded-full bg-[#111111] text-white text-xs font-medium shadow-xs">Language</div><div class="px-3.5 py-1.5 rounded-full text-gray-400 text-xs font-medium select-none">Consent</div><div class="px-3.5 py-1.5 rounded-full text-gray-400 text-xs font-medium select-none">Patient Code</div><div class="px-3.5 py-1.5 rounded-full text-gray-400 text-xs font-medium select-none">Interview</div><div class="px-3.5 py-1.5 rounded-full text-gray-400 text-xs font-medium select-none">Records</div><div class="px-3.5 py-1.5 rounded-full text-gray-400 text-xs font-medium select-none">Summary</div><div class="px-3.5 py-1.5 rounded-full text-gray-400 text-xs font-medium select-none">Token</div></nav>
+<!-- Utility Buttons -->
+
+</header>
+<!-- Main Patient Kiosk Workspace -->
+<main class="flex-1 max-w-6xl w-full mx-auto px-6 py-8 md:py-10 flex flex-col justify-center">
+<!-- Breadcrumb & Kiosk Context Indicator -->
+<div class="w-full flex items-center justify-between mb-4">
+<div class="text-[13px] font-mono tracking-wider font-semibold text-gray-500 uppercase">INITIAL SETUP</div>
+
+</div>
+<!-- Hero & Headline Section -->
+<div class="mb-8">
+<h1 class="text-3xl md:text-4xl font-semibold tracking-tight text-ink mb-2">
+        Welcome to MediKiosk
+      </h1>
+<p class="text-base text-gray-600 max-w-2xl leading-relaxed">Ayurvedic Outpatient Department (OPD) Pre-Consultation Assistant. Complete your medical history before meeting your Vaidya (doctor).</p>
+</div>
+<!-- Primary Interaction Grid (2 Columns) -->
+<div class="max-w-2xl w-full mx-auto"><div class="bg-white rounded-2xl border border-border p-6 md:p-8 shadow-xs space-y-7"><div><div class="flex items-center justify-between mb-3"><label class="text-sm font-semibold text-ink flex items-center gap-1">Select your preferred language<span class="text-rose-500 font-bold">*</span></label></div><div class="grid grid-cols-2 gap-3" id="lang-selector" role="radiogroup"><button aria-checked="true" class="lang-btn relative p-3.5 rounded-xl border-2 border-ink bg-gray-50/70 text-left flex flex-col justify-between h-[72px] transition-all" role="radio" type="button"><div class="flex items-center justify-between w-full"><span class="font-semibold text-sm text-ink">English</span><span class="material-symbols-outlined text-[18px] text-ink fill-current">check_circle</span></div></button><button aria-checked="false" class="lang-btn relative p-3.5 rounded-xl border border-border hover:border-gray-400 bg-white hover:bg-gray-50/50 text-left flex flex-col justify-between h-[72px] transition-all" role="radio" type="button"><div class="flex items-center justify-between w-full"><span class="font-semibold text-sm text-ink">हिन्दी</span><span class="material-symbols-outlined text-[18px] text-transparent check-icon">check_circle</span></div></button></div></div><div><label class="text-sm font-semibold text-ink block mb-3">Select visit status</label><div class="space-y-3" role="radiogroup"><div aria-checked="true" class="visit-card cursor-pointer p-4 rounded-xl border-2 border-ink bg-gray-50/60 flex items-start justify-between gap-4 transition-all" id="option-new" role="radio"><div class="flex items-start gap-3.5"><div class="w-10 h-10 rounded-xl bg-ink text-white flex items-center justify-center shrink-0 mt-0.5 shadow-2xs"><span class="material-symbols-outlined text-[22px]">person_add</span></div><div><div class="font-semibold text-[15px] text-ink">New Patient (First Visit)</div><div class="text-xs text-gray-600 mt-1 leading-relaxed">Begin intake for your symptoms and health history.</div></div></div><span class="material-symbols-outlined text-[20px] text-ink fill-current shrink-0 mt-1">check_circle</span></div><div aria-checked="false" class="visit-card cursor-pointer p-4 rounded-xl border border-border hover:border-gray-400 bg-white hover:bg-gray-50/40 flex items-start justify-between gap-4 transition-all" id="option-return" role="radio"><div class="flex items-start gap-3.5"><div class="w-10 h-10 rounded-xl bg-gray-100 text-gray-700 flex items-center justify-center shrink-0 mt-0.5 border border-gray-200"><span class="material-symbols-outlined text-[22px]">pin</span></div><div><div class="font-semibold text-[15px] text-ink">Returning Patient / Have Patient Code</div><div class="text-xs text-gray-600 mt-1 leading-relaxed">Enter your patient code to update records or review recent notes.</div></div></div><span class="material-symbols-outlined text-[20px] text-gray-300 visit-check shrink-0 mt-1">check_circle</span></div></div></div><div class="hidden flex-col gap-2 p-4 rounded-xl bg-gray-50 border border-border" id="code-drawer"><label class="text-xs font-semibold text-gray-700">Enter Patient Code</label><div class="flex items-center gap-2 max-w-sm"><input class="h-11 px-3 w-full rounded-lg border border-border bg-white text-center font-mono text-base tracking-widest uppercase focus:outline-none focus:ring-2 focus:ring-ink" maxlength="6" placeholder="e.g. 482910" type="text"><button class="h-11 px-4 rounded-lg bg-ink hover:bg-gray-800 text-white text-xs font-medium shrink-0 flex items-center gap-1.5 transition-colors" type="button">Verify</button></div></div><div class="pt-2 flex flex-col sm:flex-row items-center justify-end gap-3"><a class="w-full sm:w-auto h-[52px] px-8 rounded-xl bg-[#111111] hover:bg-black text-white text-sm font-medium shadow-sm inline-flex items-center justify-center gap-2 transition-all active:scale-98" href="#"><span class="">Continue to Consent</span><span class="material-symbols-outlined text-[18px]">arrow_forward</span></a></div></div></div>
+</main>
+<!-- Bottom Bar / Clinical Privacy Footer -->
+<footer class="h-16 bg-white border-t border-border px-6 lg:px-12 flex items-center justify-between text-xs text-gray-500"><div class="max-w-6xl w-full mx-auto flex items-center justify-between text-xs text-gray-500 px-0"><span class="">MediKiosk assists clinical documentation and does not diagnose or prescribe.</span></div></footer>
+<!-- Simple Interaction Logic -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+      // Language Card Toggle
+      const langButtons = document.querySelectorAll('.lang-btn');
+      langButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          langButtons.forEach(b => {
+            b.setAttribute('aria-checked', 'false');
+            b.classList.remove('border-2', 'border-ink', 'bg-gray-50/70');
+            b.classList.add('border', 'border-border', 'bg-white');
+            const icon = b.querySelector('.material-symbols-outlined.check-icon') || b.querySelector('.material-symbols-outlined.fill-current');
+            if (icon) {
+              icon.classList.remove('fill-current', 'text-ink');
+              icon.classList.add('text-transparent', 'check-icon');
+            }
+          });
+
+          btn.setAttribute('aria-checked', 'true');
+          btn.classList.remove('border', 'border-border', 'bg-white');
+          btn.classList.add('border-2', 'border-ink', 'bg-gray-50/70');
+          const activeIcon = btn.querySelector('.material-symbols-outlined');
+          if (activeIcon) {
+            activeIcon.classList.remove('text-transparent', 'check-icon');
+            activeIcon.classList.add('fill-current', 'text-ink');
+          }
+        });
+      });
+
+      // Visit Mode Toggle
+      const optionNew = document.getElementById('option-new');
+      const optionReturn = document.getElementById('option-return');
+      const codeDrawer = document.getElementById('code-drawer');
+      const toggleCodeBtn = document.getElementById('toggle-code-btn');
+
+      function setMode(isReturn) {
+        if (isReturn) {
+          optionReturn.classList.add('border-2', 'border-ink', 'bg-gray-50/60');
+          optionReturn.classList.remove('border-border', 'bg-white');
+          const check = optionReturn.querySelector('.visit-check');
+          if (check) {
+            check.classList.remove('text-gray-300');
+            check.classList.add('text-ink', 'fill-current');
+          }
+
+          optionNew.classList.remove('border-2', 'border-ink', 'bg-gray-50/60');
+          optionNew.classList.add('border-border', 'bg-white');
+          const newCheck = optionNew.querySelector('.fill-current');
+          if (newCheck) {
+            newCheck.classList.remove('text-ink', 'fill-current');
+            newCheck.classList.add('text-gray-300');
+          }
+
+          codeDrawer.classList.remove('hidden');
+          codeDrawer.classList.add('flex');
+          const inp = codeDrawer.querySelector('input');
+          if (inp) inp.focus();
+        } else {
+          optionNew.classList.add('border-2', 'border-ink', 'bg-gray-50/60');
+          optionNew.classList.remove('border-border', 'bg-white');
+          const newCheck = optionNew.querySelector('.material-symbols-outlined:last-child');
+          if (newCheck) {
+            newCheck.classList.add('text-ink', 'fill-current');
+            newCheck.classList.remove('text-gray-300');
+          }
+
+          optionReturn.classList.remove('border-2', 'border-ink', 'bg-gray-50/60');
+          optionReturn.classList.add('border-border', 'bg-white');
+          const check = optionReturn.querySelector('.visit-check');
+          if (check) {
+            check.classList.add('text-gray-300');
+            check.classList.remove('text-ink', 'fill-current');
+          }
+
+          codeDrawer.classList.add('hidden');
+          codeDrawer.classList.remove('flex');
+        }
+      }
+
+      if (optionNew && optionReturn) {
+        optionNew.addEventListener('click', () => setMode(false));
+        optionReturn.addEventListener('click', () => setMode(true));
+      }
+
+      if (toggleCodeBtn) {
+        toggleCodeBtn.addEventListener('click', () => setMode(true));
+      }
+    });
+  </script>
+
+
+</body></html>
