@@ -72,6 +72,8 @@ class Session(BaseModel):
     queue_token: Optional[str] = Field(default=None)
     presentation_domain: Optional[str] = Field(default=None)
     collected_concepts: Dict[str, Any] = Field(default_factory=dict)
+    concept_metadata: List[Dict[str, Any]] = Field(default_factory=list)
+    denied_concepts: List[str] = Field(default_factory=list)
     asked_questions: List[str] = Field(default_factory=list)
     asked_concepts: List[str] = Field(default_factory=list)
     current_pending_question: Optional[str] = Field(default=None)

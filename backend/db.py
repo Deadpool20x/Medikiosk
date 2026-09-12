@@ -51,6 +51,8 @@ def init_db(db_path: Optional[str] = None) -> None:
                     queue_token TEXT,
                     presentation_domain TEXT,
                     collected_concepts_json TEXT NOT NULL DEFAULT '{}',
+                    concept_metadata_json TEXT NOT NULL DEFAULT '[]',
+                    denied_concepts_json TEXT NOT NULL DEFAULT '[]',
                     asked_questions_json TEXT NOT NULL DEFAULT '[]',
                     asked_concepts_json TEXT NOT NULL DEFAULT '[]',
                     current_pending_question TEXT,
@@ -92,6 +94,8 @@ def _migrate_sessions_table(conn: sqlite3.Connection) -> None:
         "queue_token": "TEXT",
         "presentation_domain": "TEXT",
         "collected_concepts_json": "TEXT NOT NULL DEFAULT '{}'",
+        "concept_metadata_json": "TEXT NOT NULL DEFAULT '[]'",
+        "denied_concepts_json": "TEXT NOT NULL DEFAULT '[]'",
         "asked_questions_json": "TEXT NOT NULL DEFAULT '[]'",
         "asked_concepts_json": "TEXT NOT NULL DEFAULT '[]'",
         "current_pending_question": "TEXT",
@@ -114,8 +118,8 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                     interview_step, interview_complete, document_intake_done, chief_complaint, hpi_json, documents_json,
                     doctor_review_json, answer_records_json, raw_answers_json, safety_flagged,
                     safety_flag_time, safety_detail_json, department, queue_token,
-                    presentation_domain, collected_concepts_json, asked_questions_json, asked_concepts_json, current_pending_question, adaptive_question_count, mentioned_documents_json, adaptive, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    presentation_domain, collected_concepts_json, concept_metadata_json, denied_concepts_json, asked_questions_json, asked_concepts_json, current_pending_question, adaptive_question_count, mentioned_documents_json, adaptive, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(session_id) DO UPDATE SET
                     patient_json = excluded.patient_json,
                     language = excluded.language,
@@ -138,6 +142,8 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                     queue_token = excluded.queue_token,
                     presentation_domain = excluded.presentation_domain,
                     collected_concepts_json = excluded.collected_concepts_json,
+                    concept_metadata_json = excluded.concept_metadata_json,
+                    denied_concepts_json = excluded.denied_concepts_json,
                     asked_questions_json = excluded.asked_questions_json,
                     asked_concepts_json = excluded.asked_concepts_json,
                     current_pending_question = excluded.current_pending_question,
@@ -168,6 +174,8 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                 session.queue_token,
                 session.presentation_domain,
                 json.dumps(session.collected_concepts),
+                json.dumps(session.concept_metadata),
+                json.dumps(session.denied_concepts),
                 json.dumps(session.asked_questions),
                 json.dumps(session.asked_concepts),
                 session.current_pending_question,
@@ -199,6 +207,8 @@ def get_session(session_id: str, db_path: Optional[str] = None) -> Optional[Sess
         row_keys = row.keys()
         presentation_domain = row["presentation_domain"] if "presentation_domain" in row_keys else None
         collected_concepts = json.loads(row["collected_concepts_json"]) if "collected_concepts_json" in row_keys and row["collected_concepts_json"] else {}
+        concept_metadata = json.loads(row["concept_metadata_json"]) if "concept_metadata_json" in row_keys and row["concept_metadata_json"] else []
+        denied_concepts = json.loads(row["denied_concepts_json"]) if "denied_concepts_json" in row_keys and row["denied_concepts_json"] else []
         asked_questions = json.loads(row["asked_questions_json"]) if "asked_questions_json" in row_keys and row["asked_questions_json"] else []
         asked_concepts = json.loads(row["asked_concepts_json"]) if "asked_concepts_json" in row_keys and row["asked_concepts_json"] else []
         current_pending_question = row["current_pending_question"] if "current_pending_question" in row_keys else None
@@ -229,6 +239,8 @@ def get_session(session_id: str, db_path: Optional[str] = None) -> Optional[Sess
             queue_token=row["queue_token"],
             presentation_domain=presentation_domain,
             collected_concepts=collected_concepts,
+            concept_metadata=concept_metadata,
+            denied_concepts=denied_concepts,
             asked_questions=asked_questions,
             asked_concepts=asked_concepts,
             current_pending_question=current_pending_question,

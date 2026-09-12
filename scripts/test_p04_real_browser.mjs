@@ -60,7 +60,7 @@ async function runTests() {
         return h1 && h1.innerText !== oldQ;
       },
       q1Text,
-      { timeout: 20000 }
+      { timeout: 45000 }
     );
 
     const q2Text = await page1.locator(".mk-p04-h1").innerText();
@@ -80,7 +80,7 @@ async function runTests() {
         return h1 && h1.innerText !== oldQ;
       },
       q2Text,
-      { timeout: 20000 }
+      { timeout: 45000 }
     );
 
     const q3Text = await page1.locator(".mk-p04-h1").innerText();
@@ -139,7 +139,7 @@ async function runTests() {
         return h1 && h1.innerText !== oldQ;
       },
       qHi1,
-      { timeout: 20000 }
+      { timeout: 45000 }
     );
     const qHi2 = await pageHi.locator(".mk-p04-h1").innerText();
     record("hindi_turn2_advanced", qHi2 !== qHi1 && qHi2.length > 5, `Hindi Q2: "${qHi2}"`);
@@ -182,7 +182,7 @@ async function runTests() {
         return h1 && h1.innerText !== oldQ;
       },
       qGu1,
-      { timeout: 20000 }
+      { timeout: 45000 }
     );
     const qGu2 = await pageGu.locator(".mk-p04-h1").innerText();
     record("gujarati_turn2_advanced", qGu2 !== qGu1 && qGu2.length > 5, `Gujarati Q2: "${qGu2}"`);

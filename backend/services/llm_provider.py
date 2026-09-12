@@ -311,6 +311,7 @@ class CaseUpdate(BaseModel):
     model_config = ConfigDict(extra="ignore")
     presentation: Optional[str] = None
     concepts: Dict[str, Any] = Field(default_factory=dict)
+    denied_concepts: List[str] = Field(default_factory=list)
     mentioned_documents: List[str] = Field(default_factory=list)
 
 
@@ -361,21 +362,41 @@ async def generate_adaptive_turn(
         ),
     }.get(language, "Generate next_question.text in clear, respectful, non-technical English.")
 
+    denial_hint = session_context.get("denial_hint", "")
+    normalized_hint = ""
+    norm_map = session_context.get("language_normalized_symptoms") or {}
+    if norm_map:
+        normalized_hint = (
+            "The patient answered in a regional language. The following canonical meanings were "
+            "recognized (use these, never invent different meanings): "
+            + json.dumps(norm_map)
+        )
+
     system_prompt = (
         "You are an empathetic, clinical OPD intake conversational interviewer for MediKiosk. "
         "Your task is to understand the patient's natural language answer, update structured concepts, "
         "and propose the next most clinically useful follow-up question.\n\n"
-        "STRICT INVARIANTS:\n"
+        "STRICT CONVERSATIONAL AND CLINICAL INVARIANTS:\n"
         "1. NEVER DIAGNOSE. Never suggest a condition, illness, dosha imbalance, or disease name.\n"
         "2. NEVER PRESCRIBE OR TREAT. Never recommend medicines, herbs, dosages, treatments, or Panchakarma.\n"
-        "3. AVOID REPETITION. Do NOT ask for information already provided in collected_concepts or conversation_history.\n"
-        "4. ONE CLEAR QUESTION. Propose exactly ONE patient-facing question at a time.\n"
-        f"5. LANGUAGE: {lang_instructions}\n"
-        "6. STRUCTURED JSON OUTPUT ONLY. Respond with valid JSON matching:\n"
+        "3. NEVER ASK FOR A FACT ALREADY SUFFICIENTLY ESTABLISHED. If a concept has a value in collected_concepts, "
+        "do NOT ask for it again unless asking for necessary clarification.\n"
+        "4. TREAT EXPLICIT NEGATIVES AS ESTABLISHED ABSENT FINDINGS. If the patient denies a symptom (e.g. 'no fever', 'no vomiting'), "
+        "record it in denied_concepts and NEVER ask about it again unless clarifying.\n"
+        "5. DO NOT INFER A DIFFERENT BODY SYSTEM WITHOUT EVIDENCE. Ground your interpretation strictly in the patient's words. "
+        "Never convert stomach symptoms into jaw pain, or cough into knee pain.\n"
+        "6. DO NOT CONVERT UNCERTAINTY INTO CERTAINTY. If regional language or statement is ambiguous, ask clarification.\n"
+        "7. ONE CLEAR PATIENT-FRIENDLY QUESTION. Propose exactly ONE question using patient-friendly language.\n"
+        "8. DO NOT EXPOSE INTERNAL CONCEPT NAMES. Never say words like 'laterality', 'functional limitation', 'character', or 'site' directly.\n"
+        "9. CATEGORY COMPATIBILITY. Do not ask pain descriptors (sharp/dull/numbness) on metabolic weakness or fatigue.\n"
+        "10. AYURVEDIC TERMS (e.g., Agni, Ama, Vata) must remain provisional/literature-informed and must never imply disease diagnosis.\n"
+        f"11. LANGUAGE: {lang_instructions}\n"
+        "12. STRUCTURED JSON OUTPUT ONLY. Respond with valid JSON matching:\n"
         "{\n"
         '  "case_update": {\n'
         f'    "presentation": "one of {json.dumps(allowed_domains)}",\n'
         f'    "concepts": {{ "concept_key": "patient statement" }},\n'
+        '    "denied_concepts": ["denied symptom, e.g. fever, vomiting"],\n'
         '    "mentioned_documents": ["document mentioned by patient or empty list"]\n'
         "  },\n"
         '  "next_question": {\n'
@@ -387,7 +408,9 @@ async def generate_adaptive_turn(
         '  "status": "continue|sufficient|clarify",\n'
         '  "confidence": 0.85\n'
         "}\n"
-        f"Allowed concept keys: {json.dumps(allowed_concepts)}."
+        f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
+        f"13. {denial_hint + ' ' if denial_hint else ''}"
+        f"{normalized_hint + ' ' if normalized_hint else ''}"
     )
 
     user_prompt = (
@@ -427,6 +450,96 @@ async def generate_adaptive_turn(
             continue
 
     raise RuntimeError(f"All LLM providers failed: {last_error}")
+
+
+async def correct_adaptive_turn(
+    session_context: Dict[str, Any],
+    validation_reasons: List[str],
+    recovery_hint: Optional[str] = None,
+    providers: Optional[List[LLMProvider]] = None,
+) -> Optional[Dict[str, Any]]:
+    """One-shot bounded self-correction: ask the LLM to fix its rejected proposal.
+
+    The deterministic validator's reasons and hint are fed back once. The
+    output goes through the exact same sanitization as `generate_adaptive_turn`.
+    Returns None if every provider fails, so the caller falls back cleanly.
+    Never loops: the router calls this at most once per turn.
+    """
+    from backend.rules.adaptive_interview import ALL_DOMAINS, ALL_ALLOWED_CONCEPTS
+
+    allowed_domains = sorted(ALL_DOMAINS)
+    allowed_concepts = sorted(ALL_ALLOWED_CONCEPTS)
+    language = session_context.get("language", "en")
+
+    lang_instructions = {
+        "hi": ("Respond in simple, polite conversational Hindi (Devanagari script). Keep concept keys and JSON in English."),
+        "gu": ("Respond in simple, polite conversational Gujarati (Gujarati script). Keep concept keys and JSON in English."),
+        "en": ("Respond in clear, respectful, non-technical English."),
+    }.get(language, "Respond in clear, respectful, non-technical English.")
+
+    feedback = (
+        "Your previous proposal was REJECTED by the clinical policy validator.\n"
+        f"Reasons:\n- " + "\n- ".join(validation_reasons) + "\n"
+        + (f"Hint: {recovery_hint}\n" if recovery_hint else "")
+        + "Fix ALL reasons. In particular: pick a DIFFERENT concept that is unanswered, unasked, "
+        "not denied by the patient, and appropriate for the presentation domain. "
+        "Never repeat a previously asked question."
+    )
+
+    system_prompt = (
+        "You are the MediKiosk intake interviewer being asked to correct a rejected follow-up proposal. "
+        "Respond with EXACTLY the same JSON schema as before.\n"
+        f"Allowed domains: {json.dumps(allowed_domains)}. "
+        f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
+        f"Language: {lang_instructions}\n"
+        "STRICT:\n"
+        "1. NEVER diagnose, prescribe, or treat.\n"
+        "2. target_concept must be one specific allowed concept.\n"
+        "3. Never use internal concept names in the question text.\n"
+        "4. If the concept you chose before was rejected as already answered/asked, choose instead "
+        "the single most clinically useful UNASKED concept relevant to this presentation.\n"
+    )
+
+    user_prompt = (
+        f"Current Session Context:\n{json.dumps(session_context, indent=2)}\n\n"
+        f"Validator Feedback:\n{feedback}\n\n"
+        "Return ONLY the corrected JSON proposal."
+    )
+
+    if providers is None:
+        providers = iter_llm_providers()
+
+    last_error: Optional[Exception] = None
+    for provider in providers:
+        try:
+            response = await provider.generate(user_prompt, system_prompt=system_prompt)
+            if not response:
+                raise RuntimeError("Empty response from LLM provider")
+            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
+            data = json.loads(cleaned)
+            parsed = AdaptiveTurnProposal.model_validate(data)
+
+            sanitized_concepts = {}
+            for k, v in parsed.case_update.concepts.items():
+                if k in allowed_concepts and v is not None and str(v).strip():
+                    sanitized_concepts[k] = str(v).strip()
+            parsed.case_update.concepts = sanitized_concepts
+
+            return {
+                "case_update": parsed.case_update.model_dump(),
+                "next_question": parsed.next_question.model_dump() if parsed.next_question else None,
+                "status": parsed.status,
+                "confidence": parsed.confidence,
+                "provider": provider.provider_name,
+                "corrected": True,
+            }
+        except Exception as e:
+            last_error = e
+            continue
+
+    if last_error:
+        raise RuntimeError(f"All LLM providers failed during correction: {last_error}")
+    return None
 
 
 async def extract_case(

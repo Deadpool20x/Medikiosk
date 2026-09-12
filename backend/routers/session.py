@@ -15,6 +15,8 @@ from backend.rules.adaptive_interview import (
     extract_mentioned_documents,
     extract_concepts_from_payload,
     extract_concepts_from_text,
+    extract_denied_concepts,
+    find_concept_conflicts,
     select_next_question,
     evaluate_conversational_sufficiency,
     evaluate_sufficiency,
@@ -35,6 +37,7 @@ from backend.services.llm_provider import (
     get_llm_provider,
     iter_llm_providers,
     generate_adaptive_turn,
+    correct_adaptive_turn,
     AdaptiveTurnProposal,
 )
 from backend.services.ocr_provider import run_document_ocr, OCRUnavailableError, OCR_CONFIDENCE_THRESHOLD
@@ -176,6 +179,7 @@ class AnswerResponse(BaseModel):
     questions_asked: int = 0
     adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
     mentioned_documents: List[str] = Field(default_factory=list)
+    denied_concepts: List[str] = Field(default_factory=list)
 
 class UploadResponse(BaseModel):
     extracted_value: Optional[str] = None
@@ -227,6 +231,7 @@ class SessionResponse(BaseModel):
     asked_questions: List[str] = Field(default_factory=list)
     adaptive_question_count: int = 0
     mentioned_documents: List[str] = Field(default_factory=list)
+    denied_concepts: List[str] = Field(default_factory=list)
     interview_status: str = "in_progress"
     adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
 
@@ -346,6 +351,7 @@ async def get_session(session_id: str):
         asked_questions=session.asked_questions,
         adaptive_question_count=session.adaptive_question_count,
         mentioned_documents=session.mentioned_documents,
+        denied_concepts=session.denied_concepts,
         interview_status=_interview_status(session),
         adaptive_question_limit=get_presentation_profile(session.presentation_domain).max_questions,
     )
@@ -530,10 +536,22 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     new_question_text = None
     new_target_concept = None
 
-    # Step 1: Formulate bounded context
+    # ── 10-Stage Turn Pipeline (Phase 1.7 Conversational Reliability) ──
+    # Stage 1: Safety precheck already passed above
+
+    # Stage 2: Language-aware normalization, denied concepts & extraction
+    denied_this_turn = extract_denied_concepts(payload.answer)
+    for d in denied_this_turn:
+        if d not in session.denied_concepts:
+            session.denied_concepts.append(d)
+
+    # Heuristic free-text extraction for resilience
+    text_concepts = extract_concepts_from_text(payload.answer, domain=session.presentation_domain)
+
+    # Stage 3: Formulate bounded context (including denied concepts)
     context = build_conversation_context(session, payload.answer)
 
-    # Step 2: LLM Interpretation & Follow-up Proposal
+    # Stage 4: LLM next-question generation
     llm_result = None
     try:
         llm_result = await generate_adaptive_turn(context)
@@ -547,6 +565,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
                 "case_update": {
                     "presentation": legacy_case.get("domain"),
                     "concepts": legacy_case.get("concepts", {}),
+                    "denied_concepts": [],
                     "mentioned_documents": legacy_case.get("mentioned_documents", []),
                 },
                 "next_question": None,
@@ -559,7 +578,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         except Exception:
             needs_review = True
 
-    # Step 3: Concept extraction and case state update
+    # Structured case-state concepts & domain update
     concepts: Dict[str, Any] = {}
     extracted_domain = None
     mentioned: List[str] = []
@@ -570,13 +589,25 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         concepts = {k: v for k, v in extracted_concepts.items() if _usable_concept_value(v)}
         extracted_domain = case_up.get("presentation")
         mentioned = [str(d) for d in (case_up.get("mentioned_documents") or []) if d and str(d).strip()]
+        for d in case_up.get("denied_concepts") or []:
+            if d and d not in session.denied_concepts:
+                session.denied_concepts.append(d)
 
-    # Heuristic free-text extraction for resilience
-        if llm_result is not None:
-            text_concepts = extract_concepts_from_text(payload.answer, domain=session.presentation_domain)
-            for hk, hv in text_concepts.items():
-                if _usable_concept_value(hv) and not _usable_concept_value(concepts.get(hk)):
-                    concepts[hk] = hv
+    # Blend heuristic extraction where LLM missed
+    for hk, hv in text_concepts.items():
+        if _usable_concept_value(hv) and not _usable_concept_value(concepts.get(hk)):
+            concepts[hk] = hv
+
+    # Clinical Meaning Conflict Check
+    conflicts = find_concept_conflicts(concepts, payload.answer, session.collected_concepts, session.denied_concepts)
+    if conflicts:
+        needs_review = True
+        # Purge conflicting concepts so invalid extractions (e.g. jaw pain from stomach burning) are not persisted
+        sanitized_concepts = {}
+        for ck, cv in concepts.items():
+            if not any(f"'{ck}'" in conf for conf in conflicts):
+                sanitized_concepts[ck] = cv
+        concepts = sanitized_concepts
 
     # Normalization
     if "complaint" in concepts and "primary_symptom" not in concepts:
@@ -584,7 +615,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     if "primary_symptom" in concepts and "chief_complaint" not in concepts:
         concepts["chief_complaint"] = concepts["primary_symptom"]
 
-    # Ensure current concept is captured
+    # Ensure current concept is captured if answered
     if _usable_concept_value(payload.answer) and not _usable_concept_value(concepts.get(current_concept)):
         concepts[current_concept] = payload.answer.strip()
         if not llm_result:
@@ -607,7 +638,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     doc_matches = extract_mentioned_documents(payload.answer)
     session.mentioned_documents = list(dict.fromkeys([*(session.mentioned_documents or []), *mentioned, *doc_matches]))
 
-    # Step 4: Validate LLM Proposal
+    # Stage 5: Deterministic Validator
     validation = None
     is_valid = False
     llm_status = llm_result.get("status", "continue") if llm_result else None
@@ -628,9 +659,40 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         elif validation.valid and dummy_prop.status == "sufficient":
             is_valid = True
         elif not validation.valid:
-            needs_review = True
+            # Stage 6: One Bounded LLM Self-Correction
+            try:
+                corrected_result = await correct_adaptive_turn(
+                    session_context=context,
+                    validation_reasons=validation.reasons,
+                    recovery_hint=validation.recovery_hint,
+                )
+                if corrected_result and isinstance(corrected_result, dict):
+                    corr_next_q = corrected_result.get("next_question")
+                    corr_status = corrected_result.get("status", "continue")
+                    corr_prop = SimpleNamespace(
+                        case_update=SimpleNamespace(concepts=concepts),
+                        next_question=SimpleNamespace(**corr_next_q) if corr_next_q else None,
+                        status=corr_status,
+                    )
+                    # Stage 7: Validate corrected proposal
+                    corr_val = validate_llm_proposal(corr_prop, session, session.presentation_domain)
+                    if corr_val.valid and corr_prop.next_question:
+                        is_valid = True
+                        new_question_text = corr_prop.next_question.text
+                        new_target_concept = corr_prop.next_question.target_concept
+                        llm_status = corr_status
+                        provider_used = corrected_result.get("provider", provider_used)
+                    elif corr_val.valid and corr_prop.status == "sufficient":
+                        is_valid = True
+                        llm_status = "sufficient"
+                    else:
+                        needs_review = True
+                else:
+                    needs_review = True
+            except Exception:
+                needs_review = True
 
-    # Step 5: Sufficiency evaluation & Hard Cap
+    # Stage 8: Sufficiency evaluation or human fallback
     session.adaptive_question_count += 1
     is_sufficient = evaluate_conversational_sufficiency(session, llm_status)
 
@@ -641,6 +703,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         new_question_text = None
     else:
         if not is_valid or not new_question_text:
+            # Stage 8: Human-written deterministic fallback
             fallback = get_fallback_question(session)
             new_question_text = fallback["text"]
             new_target_concept = fallback["target_concept"]
@@ -652,7 +715,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         session.asked_questions.append(new_question_text)
         session.asked_concepts.append(new_target_concept)
 
-    # Step 6: Bridge to Legacy Schema & Save
+    # Stage 9: Persist state & bridge to legacy schema
     bridge_concepts_to_legacy(session)
 
     answer_record = AnswerRecord(
@@ -666,6 +729,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
 
     db_save_session(session)
 
+    # Stage 10: Return question response
     return AnswerResponse(
         next_question=new_question_text,
         session_complete=session.interview_complete,
