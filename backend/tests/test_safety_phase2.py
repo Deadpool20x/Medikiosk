@@ -31,19 +31,22 @@ def _start_and_code(client):
     return sid
 
 
-class _FakeProvider:
-    provider_name = "gemini"
-
-
-def _fake_extract(provider, field, ans):
+def _fake_extract_case(ans, current_concept=None, domain_hint=None):
+    values = {
+        "primary_symptom": "stomach pain",
+        "onset": "2 days ago",
+        "duration": "2 days",
+        "severity": "moderate",
+        "character": "sharp",
+        "associated_symptoms": ["nausea"],
+    }
     return {
-        "chief_complaint": {"complaint": "stomach pain", "confidence": 0.9},
-        "onset": {"onset": "2 days ago", "confidence": 0.9},
-        "duration": {"duration": "2 days", "confidence": 0.9},
-        "severity": {"severity": "moderate", "confidence": 0.9},
-        "character": {"character": "sharp", "confidence": 0.9},
-        "associated_symptoms": {"associated_symptoms": ["nausea"], "confidence": 0.9},
-    }[field]
+        "domain": "general",
+        "concepts": {current_concept: values.get(current_concept)},
+        "confidence": 0.9,
+        "mentioned_documents": [],
+        "provider": "gemini",
+    }
 
 
 def test_raw_red_flag_text_is_flagged(client):
@@ -60,15 +63,15 @@ def test_safe_answer_is_not_flagged(client):
 
 def test_raw_detection_survives_llm_failure(client):
     sid = _start_and_code(client)
-    with patch.object(session_router, "get_llm_provider", side_effect=Exception("no provider")):
-        # safety must trigger BEFORE extraction is even attempted
-        r = client.post(f"/session/{sid}/answer", json={"answer": "difficulty breathing and chest pain"})
+    # no provider configured -> extract_case raises, but safety screening runs
+    # BEFORE extraction, so a flagged answer is still caught
+    r = client.post(f"/session/{sid}/answer", json={"answer": "difficulty breathing and chest pain"})
     assert r.json()["red_flag"] is True
 
 
 def test_provider_unavailable_does_not_bypass_safety(client):
     sid = _start_and_code(client)
-    # no providers configured -> get_llm_provider raises. Safe path => needs_review.
+    # no providers configured -> extract_case raises. Safe path => needs_review.
     r = client.post(f"/session/{sid}/answer", json={"answer": "carrying breathing problems"})
     assert r.status_code == 200
     # red flag still caught on a genuinely flagged answer without any provider
@@ -108,8 +111,7 @@ def test_flagged_session_persists_across_refresh(client):
 def test_flagged_session_shows_in_emergency_dashboard(client):
     safe_sid = _start_and_code(client)
     flagged_sid = _start_and_code(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         r = client.post(f"/session/{safe_sid}/answer", json={"answer": "mild headache"})
         assert r.json()["red_flag"] is False
     client.post(f"/session/{flagged_sid}/answer", json={"answer": "chest tightness radiating to the arm"})
@@ -122,8 +124,7 @@ def test_flagged_session_shows_in_emergency_dashboard(client):
 
 def test_safe_session_remains_eligible(client):
     sid = _start_and_code(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         client.post(f"/session/{sid}/answer", json={"answer": "stomach pain"})
     g = client.get(f"/session/{sid}").json()
     assert g["safety_flagged"] is False
@@ -135,8 +136,7 @@ def test_safe_session_remains_eligible(client):
 def test_d01_excludes_flagged_sessions(client):
     safe_sid = _start_and_code(client)
     flagged_sid = _start_and_code(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         client.post(f"/session/{safe_sid}/answer", json={"answer": "mild headache"})
     client.post(f"/session/{flagged_sid}/answer", json={"answer": "cardiac arrest"})
     sessions = client.get("/doctor/sessions").json()
@@ -147,8 +147,7 @@ def test_d01_excludes_flagged_sessions(client):
 
 def test_flagged_session_cannot_enter_normal_queue_progression(client):
     sid = _start_and_code(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         # complete a normal interview first
         for ans in ["stomach pain", "2 days ago", "2 days", "moderate", "sharp", "nausea"]:
             r = client.post(f"/session/{sid}/answer", json={"answer": ans})

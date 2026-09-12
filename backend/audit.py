@@ -34,17 +34,23 @@ class _FakeProvider:
 
 
 def _mock_extract(provider, field, ans):
-    """Echo the raw answer as the structured extraction value.
-
-    Mirrors the deterministic provider used by the passing pytest scenario
-    (test_s1_normal_flow_persistence_p01_to_d03) and the p0 browser server, so
-    the audit exercises the real session workflow with a stable LLM result.
-    """
+    """Echo the raw answer as the structured extraction value."""
     if field == "chief_complaint":
         return {"complaint": ans.strip(), "confidence": 0.9}
     if field == "associated_symptoms":
         return {"associated_symptoms": [ans.strip()], "confidence": 0.9}
     return {field: ans.strip(), "confidence": 0.9}
+
+
+def _mock_extract_case(ans, current_concept=None, domain_hint=None):
+    """Echo the raw answer as the structured case extraction value."""
+    return {
+        "domain": "general",
+        "concepts": {current_concept: ans.strip()},
+        "confidence": 0.9,
+        "mentioned_documents": [],
+        "provider": "gemini",
+    }
 
 def setup_test_db():
     """Create a temporary database for testing."""
@@ -96,7 +102,8 @@ def test_normal_patient_flow():
         ]
         
         with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-             patch.object(session_router, "extract_field", side_effect=_mock_extract):
+             patch.object(session_router, "extract_field", side_effect=_mock_extract), \
+             patch.object(session_router, "extract_case", side_effect=_mock_extract_case):
             for field, answer in answers:
                 response = client.post(f"/session/{session_id}/answer", json={"answer": answer})
                 assert response.status_code == 200, f"Failed to submit answer for {field}: {response.text}"

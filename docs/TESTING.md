@@ -8,7 +8,7 @@ MediKiosk maintains strict test-driven development (TDD) standards and clinical 
 
 | Test Category | Suite / Runner | Verified Cases | Purpose |
 | :--- | :--- | :--- | :--- |
-| **Backend Unit & Integration** | `pytest backend/tests` | **164 passing** | State machine, rules, OCR validation, security headers, database locking |
+| **Backend Unit & Integration** | `pytest backend/tests` | **179 passing** | State machine, rules, OCR validation, security headers, database locking |
 | **Clinical Invariant Audit** | `python -m backend.audit` | **9 / 9 passing** | State-bypass audit, token integrity, red-flag escalation, department routing |
 | **Frontend Type Safety** | `npx tsc --noEmit` | **0 errors** | Strict TypeScript component and API type checking |
 | **Frontend Production Build** | `npm run build` | **All routes clean** | Next.js 16 SSR & static page pre-rendering verification |
@@ -21,7 +21,7 @@ MediKiosk maintains strict test-driven development (TDD) standards and clinical 
 The backend test suite covers API routes, session lifecycle transitions, security controls, and provider fallbacks.
 
 ```bash
-# Run all 164 tests
+# Run all 179 tests
 pytest backend/tests -v
 
 # Run with concise summary

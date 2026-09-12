@@ -7,6 +7,8 @@ from typing import Optional, Dict, Any, List
 
 import httpx
 
+from pydantic import BaseModel, Field, ConfigDict
+
 logger = logging.getLogger(__name__)
 
 
@@ -283,6 +285,86 @@ async def extract_with_fallback(field: str, patient_answer: str) -> Dict[str, An
                 "data": data,
                 "provider": provider.provider_name,
                 "confidence": data.get("confidence", 0.8),
+            }
+        except Exception as e:
+            last_error = e
+            continue
+    raise RuntimeError(f"All LLM providers failed: {last_error}")
+
+
+class CaseExtraction(BaseModel):
+    """Strict structured case extraction contract for the adaptive engine.
+
+    The deterministic engine is authoritative for question selection; this
+    model only conveys what the patient's answer said. Domain and concept keys
+    are validated against the engine's whitelists before anything is applied.
+    """
+    model_config = ConfigDict(extra="forbid")
+
+    domain: Optional[str] = None
+    concepts: Dict[str, Any] = Field(default_factory=dict)
+    confidence: float = Field(default=0.8, ge=0.0, le=1.0)
+    mentioned_documents: List[str] = Field(default_factory=list)
+
+
+async def extract_case(
+    patient_answer: str,
+    current_concept: Optional[str] = None,
+    domain_hint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Structured case extraction: one LLM call yields multiple concepts,
+    a suggested presentation domain, and document mentions.
+
+    Returns dict with keys: domain, concepts, confidence, mentioned_documents,
+    provider. Validation is strict (extra fields rejected, only whitelisted
+    concept/domain keys accepted). Raises only if every configured provider
+    fails or returns a malformed payload. The caller (router) treats a raising
+    call as an extraction failure and falls back to deterministic routing.
+    """
+    from backend.rules.adaptive_interview import ALL_DOMAINS, ALL_ALLOWED_CONCEPTS
+
+    allowed_domains = set(ALL_DOMAINS)
+    allowed_concepts = set(ALL_ALLOWED_CONCEPTS)
+
+    system_prompt = (
+        "You extract structured medical intake facts from ONE patient answer about a kiosk "
+        "health interview. Respond with ONLY valid JSON and EXACTLY these keys: "
+        '"domain", "concepts", "confidence", "mentioned_documents". '
+        f'"domain" must be one of {json.dumps(sorted(allowed_domains))} or null when the answer '
+        "does not clearly indicate one. "
+        f'"concepts" is an object whose keys may ONLY be chosen from '
+        f"{json.dumps(sorted(allowed_concepts))}; set a key to null when the patient did not "
+        "mention it — never guess or invent values not stated. Track the concept currently being "
+        "asked and bias each concept's value toward what the patient literally said. "
+        '"confidence" is a number 0-1. "mentioned_documents" is an array of document types '
+        '(e.g. "blood report", "prescription", "x-ray report") the patient says they have, or []. '
+        "Never include any diagnosis, treatment, or clinical judgment."
+    )
+
+    providers = iter_llm_providers()
+    last_error: Optional[Exception] = None
+    for provider in providers:
+        try:
+            response = await provider.generate(patient_answer, system_prompt=system_prompt)
+            if not response:
+                raise RuntimeError("Empty response from LLM provider")
+            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
+            data = json.loads(cleaned)
+            parsed = CaseExtraction.model_validate(data)
+            if parsed.domain and parsed.domain not in allowed_domains:
+                raise ValueError(f"LLM returned unknown domain: {parsed.domain}")
+            bad_concepts = set(parsed.concepts) - allowed_concepts
+            if bad_concepts:
+                raise ValueError(f"LLM returned unknown concepts: {sorted(bad_concepts)}")
+            for key, value in parsed.concepts.items():
+                if value is None:
+                    parsed.concepts[key] = ""
+            return {
+                "domain": parsed.domain,
+                "concepts": parsed.concepts,
+                "confidence": parsed.confidence,
+                "mentioned_documents": parsed.mentioned_documents or [],
+                "provider": provider.provider_name,
             }
         except Exception as e:
             last_error = e

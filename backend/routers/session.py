@@ -7,10 +7,28 @@ import secrets
 from datetime import datetime, timezone
 from backend.models.schema import Session, Patient, DoctorReview, DocumentField, HistoryOfPresentIllness, AnswerRecord
 from backend.db import get_session as db_get_session, save_session as db_save_session, init_db, next_queue_token
+import os
+from backend.rules.adaptive_interview import (
+    ALL_DOMAINS,
+    MAX_ADAPTIVE_QUESTIONS,
+    classify_presentation_domain,
+    extract_mentioned_documents,
+    extract_concepts_from_payload,
+    select_next_question,
+    evaluate_sufficiency,
+    bridge_concepts_to_legacy,
+    get_presentation_profile,
+    DOMAIN_GENERAL,
+)
 from backend.rules.interview_rules import get_next_question, get_field_value, REQUIRED_FIELDS_ORDER
 from backend.rules.safety_rules import evaluate_safety
 from backend.rules.department_rules import classify_department, DEPARTMENT_TOKEN_PREFIX
-from backend.services.llm_provider import extract_field, iter_llm_providers, get_llm_provider
+from backend.services.llm_provider import (
+    extract_case,
+    extract_field,
+    get_llm_provider,
+    iter_llm_providers,
+)
 from backend.services.ocr_provider import run_document_ocr, OCRUnavailableError, OCR_CONFIDENCE_THRESHOLD
 from backend.services.documents import correct_document
 from PIL import Image
@@ -68,10 +86,54 @@ def _is_valid_image(data: bytes, mime: str) -> bool:
     except Exception:  # noqa: BLE001 - any decode failure is an invalid upload
         return False
 
+def _concept_from_step(step: str) -> str:
+    """Map the legacy interview_step name to the adaptive concept key.
+    All profiles ask primary_symptom as their first question, which is
+    presented to the legacy fields as chief_complaint."""
+    if step == "chief_complaint":
+        return "primary_symptom"
+    return step
+
+
+def _usable_concept_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, (list, tuple, set)):
+        return any(_usable_concept_value(v) for v in value)
+    if isinstance(value, dict):
+        return any(_usable_concept_value(v) for v in value.values())
+    return True
+
+
+def _select_pending(session: Session) -> Optional[Dict[str, Any]]:
+    """Deterministic next-question selection (engine authority)."""
+    if session.interview_complete or session.safety_flagged:
+        return None
+    return select_next_question(session)
+
+
+def _next_question_text(session: Session) -> Optional[str]:
+    pending = _select_pending(session)
+    return pending["question_text"] if pending else None
+
+
+def _interview_status(session: Session) -> str:
+    if session.safety_flagged:
+        return "safety_flagged"
+    if session.interview_complete:
+        return "complete"
+    return "in_progress"
+
+
 class StartSessionRequest(BaseModel):
     patient: Patient
     language: str = Field(default="en")
     visit_type: str = Field(default="new")
+    adaptive: Optional[bool] = Field(default=None)
 
 class StartSessionResponse(BaseModel):
     session_id: str
@@ -94,6 +156,11 @@ class AnswerResponse(BaseModel):
     session_complete: bool
     red_flag: bool = False
     needs_review: bool = False
+    presentation_domain: Optional[str] = None
+    interview_status: str = "in_progress"
+    questions_asked: int = 0
+    adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
+    mentioned_documents: List[str] = Field(default_factory=list)
 
 class UploadResponse(BaseModel):
     extracted_value: Optional[str] = None
@@ -140,10 +207,24 @@ class SessionResponse(BaseModel):
     safety_detail: List[str] = Field(default_factory=list)
     department: Optional[str] = None
     queue_token: Optional[str] = None
+    presentation_domain: Optional[str] = None
+    collected_concepts: Dict[str, Any] = Field(default_factory=dict)
+    asked_questions: List[str] = Field(default_factory=list)
+    adaptive_question_count: int = 0
+    mentioned_documents: List[str] = Field(default_factory=list)
+    interview_status: str = "in_progress"
+    adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
 
 @router.post("/start", response_model=StartSessionResponse)
 async def start_session(payload: StartSessionRequest):
     session_id = str(uuid.uuid4())
+    
+    use_adaptive = False
+    if payload.adaptive is True:
+        use_adaptive = True
+    elif payload.visit_type in ("adaptive", "pilot"):
+        use_adaptive = True
+
     session = Session(
         session_id=session_id,
         patient=payload.patient,
@@ -158,7 +239,13 @@ async def start_session(payload: StartSessionRequest):
         documents=[],
         doctor_review=DoctorReview(),
         answer_records=[],
-        raw_answers=[]
+        raw_answers=[],
+        presentation_domain=None,
+        collected_concepts={},
+        asked_questions=[],
+        adaptive_question_count=0,
+        mentioned_documents=[],
+        adaptive=use_adaptive,
     )
     db_save_session(session)
     return StartSessionResponse(session_id=session_id)
@@ -208,6 +295,11 @@ async def get_session(session_id: str):
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    if getattr(session, "adaptive", False):
+        next_question = _next_question_text(session)
+    else:
+        next_question = get_next_question(session) if not session.interview_complete else None
+
     return SessionResponse(
         session_id=session.session_id,
         patient=session.patient,
@@ -224,12 +316,19 @@ async def get_session(session_id: str):
         doctor_review=session.doctor_review.model_dump(),
         answer_records=[ar.model_dump(mode="json") for ar in session.answer_records],
         raw_answers=session.raw_answers,
-        next_question=get_next_question(session) if not session.interview_complete else None,
+        next_question=_next_question_text(session),
         safety_flagged=session.safety_flagged,
         safety_flag_time=session.safety_flag_time.isoformat() if session.safety_flag_time else None,
         safety_detail=session.safety_detail,
         department=session.department,
         queue_token=session.queue_token,
+        presentation_domain=session.presentation_domain,
+        collected_concepts=session.collected_concepts,
+        asked_questions=session.asked_questions,
+        adaptive_question_count=session.adaptive_question_count,
+        mentioned_documents=session.mentioned_documents,
+        interview_status=_interview_status(session),
+        adaptive_question_limit=get_presentation_profile(session.presentation_domain).max_questions,
     )
 
 @router.post("/{session_id}/answer", response_model=AnswerResponse)
@@ -245,7 +344,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         raise HTTPException(status_code=403, detail="Patient code required before answering")
 
     if session.safety_flagged:
-        return AnswerResponse(next_question=None, session_complete=session.interview_complete, red_flag=True)
+        return AnswerResponse(next_question=None, session_complete=session.interview_complete, red_flag=True, interview_status="safety_flagged")
 
     safety = evaluate_safety(payload.answer, session)
     if safety.flagged:
@@ -261,10 +360,10 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         }
         session.raw_answers.append(raw_answer_record)
         db_save_session(session)
-        return AnswerResponse(next_question=None, session_complete=session.interview_complete, red_flag=True)
+        return AnswerResponse(next_question=None, session_complete=session.interview_complete, red_flag=True, interview_status="safety_flagged")
 
     if session.interview_complete:
-        return AnswerResponse(next_question=None, session_complete=True)
+        return AnswerResponse(next_question=None, session_complete=True, interview_status="complete")
 
     current_field = session.interview_step
 
@@ -276,83 +375,213 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     }
     session.raw_answers.append(raw_answer_record)
 
-    extracted_data = None
+    if not getattr(session, "adaptive", True):
+        # Legacy sequential progression
+        extracted_data = None
+        provider_used = None
+        confidence = None
+        needs_review = False
+
+        try:
+            primary = get_llm_provider()
+            try:
+                extracted_data = await extract_field(primary, current_field, payload.answer)
+                provider_used = primary.provider_name
+                confidence = extracted_data.get("confidence", 0.8) if isinstance(extracted_data, dict) else 0.8
+            except Exception:
+                chain = [p for p in iter_llm_providers() if p is not primary]
+                for fallback in chain:
+                    try:
+                        extracted_data = await extract_field(fallback, current_field, payload.answer)
+                        provider_used = fallback.provider_name
+                        if isinstance(extracted_data, dict) and "confidence" in extracted_data:
+                            confidence = min(extracted_data["confidence"], 0.7)
+                        else:
+                            confidence = 0.7
+                        break
+                    except Exception:
+                        continue
+                if extracted_data is None:
+                    needs_review = True
+        except Exception:
+            needs_review = True
+
+        if extracted_data and isinstance(extracted_data, dict):
+            if current_field == "chief_complaint":
+                field_value = extracted_data.get("complaint")
+                if field_value and str(field_value).strip():
+                    session.chief_complaint = str(field_value).strip()
+                else:
+                    session.chief_complaint = payload.answer
+                    needs_review = True
+            elif current_field == "onset":
+                field_value = extracted_data.get("onset")
+                if field_value and str(field_value).strip():
+                    session.history_of_present_illness.onset = str(field_value).strip()
+                else:
+                    session.history_of_present_illness.onset = payload.answer
+                    needs_review = True
+            elif current_field == "duration":
+                field_value = extracted_data.get("duration")
+                if field_value and str(field_value).strip():
+                    session.history_of_present_illness.duration = str(field_value).strip()
+                else:
+                    session.history_of_present_illness.duration = payload.answer
+                    needs_review = True
+            elif current_field == "severity":
+                field_value = extracted_data.get("severity")
+                if field_value and str(field_value).strip():
+                    session.history_of_present_illness.severity = str(field_value).strip()
+                else:
+                    session.history_of_present_illness.severity = payload.answer
+                    needs_review = True
+            elif current_field == "character":
+                field_value = extracted_data.get("character")
+                if field_value and str(field_value).strip():
+                    session.history_of_present_illness.character = str(field_value).strip()
+                else:
+                    session.history_of_present_illness.character = payload.answer
+                    needs_review = True
+            elif current_field == "associated_symptoms":
+                field_value = extracted_data.get("associated_symptoms")
+                if field_value and isinstance(field_value, list) and len(field_value) > 0 and any(s for s in field_value if s and str(s).strip()):
+                    session.history_of_present_illness.associated_symptoms = [str(s).strip() for s in field_value if s and str(s).strip()]
+                elif field_value and isinstance(field_value, str) and field_value.strip():
+                    symptoms = [s.strip() for s in field_value.split(",") if s.strip()]
+                    session.history_of_present_illness.associated_symptoms = symptoms if symptoms else [field_value.strip()]
+                else:
+                    session.history_of_present_illness.associated_symptoms = [payload.answer]
+                    needs_review = True
+        else:
+            needs_review = True
+            if current_field == "chief_complaint":
+                session.chief_complaint = payload.answer
+            elif current_field == "onset":
+                session.history_of_present_illness.onset = payload.answer
+            elif current_field == "duration":
+                session.history_of_present_illness.duration = payload.answer
+            elif current_field == "severity":
+                session.history_of_present_illness.severity = payload.answer
+            elif current_field == "character":
+                session.history_of_present_illness.character = payload.answer
+            elif current_field == "associated_symptoms":
+                session.history_of_present_illness.associated_symptoms = [payload.answer]
+
+        answer_record = AnswerRecord(
+            question=current_field,
+            answer=payload.answer,
+            provider=provider_used,
+            confidence=confidence,
+            needs_review=needs_review,
+        )
+        session.answer_records.append(answer_record)
+
+        next_field = None
+        for field in REQUIRED_FIELDS_ORDER:
+            if get_field_value(session, field) is None:
+                next_field = field
+                break
+
+        if next_field:
+            session.interview_step = next_field
+            session.interview_complete = False
+        else:
+            session.interview_complete = True
+            session.interview_step = "complete"
+
+        db_save_session(session)
+        next_question = get_next_question(session) if not session.interview_complete else None
+        return AnswerResponse(
+            next_question=next_question,
+            session_complete=session.interview_complete,
+            red_flag=False,
+            needs_review=needs_review,
+            interview_status="complete" if session.interview_complete else "in_progress",
+        )
+
+    # ── Adaptive Engine Execution Path ─────────────────────────────────────
+    # Determine which adaptive concept the patient is currently answering.
+    pending = _select_pending(session)
+    if pending and (pending["legacy_field"] or pending["concept_key"]) == current_field:
+        current_concept = pending["concept_key"]
+    else:
+        current_concept = _concept_from_step(current_field)
+
+    concepts: Dict[str, Any] = {}
+    extracted_domain = None
     provider_used = None
     confidence = None
+    mentioned: List[str] = []
     needs_review = False
 
     try:
-        primary = get_llm_provider()
-        try:
-            extracted_data = await extract_field(primary, current_field, payload.answer)
-            provider_used = primary.provider_name
-            confidence = extracted_data.get("confidence", 0.8) if isinstance(extracted_data, dict) else 0.8
-        except Exception:
-            chain = [p for p in iter_llm_providers() if p is not primary]
-            for fallback in chain:
-                try:
-                    extracted_data = await extract_field(fallback, current_field, payload.answer)
-                    provider_used = fallback.provider_name
-                    if isinstance(extracted_data, dict) and "confidence" in extracted_data:
-                        confidence = min(extracted_data["confidence"], 0.7)
-                    else:
-                        confidence = 0.7
-                    break
-                except Exception:
-                    continue
-            if extracted_data is None:
-                needs_review = True
+        result = await extract_case(payload.answer, current_concept, session.presentation_domain)
+        provider_used = result.get("provider")
+        confidence = result.get("confidence")
+        extracted_domain = result.get("domain")
+        concepts = {k: v for k, v in (result.get("concepts") or {}).items() if _usable_concept_value(v)}
+        mentioned = [str(d) for d in (result.get("mentioned_documents") or []) if d and str(d).strip()]
     except Exception:
         needs_review = True
+    llm_captured_current = _usable_concept_value(concepts.get(current_concept))
 
-    # ── Apply extracted value to session field ──────────────────────────────
-    # Primary path: LLM extraction succeeded — use structured value.
-    # Fallback path: LLM failed (needs_review=True) — store the raw answer text
-    #   directly so the rules engine can advance the interview step.
-    #   The field is marked needs_review=True in the AnswerRecord; the doctor
-    #   will see it flagged for manual review in D02/D03.
-    if extracted_data and isinstance(extracted_data, dict):
-        if current_field == "chief_complaint":
-            field_value = extracted_data.get("complaint")
-            if field_value:
-                session.chief_complaint = field_value
-            elif needs_review:
-                session.chief_complaint = payload.answer
-        elif current_field == "onset":
-            field_value = extracted_data.get("onset")
-            session.history_of_present_illness.onset = field_value or (payload.answer if needs_review else None) or session.history_of_present_illness.onset
-        elif current_field == "duration":
-            field_value = extracted_data.get("duration")
-            session.history_of_present_illness.duration = field_value or (payload.answer if needs_review else None) or session.history_of_present_illness.duration
-        elif current_field == "severity":
-            field_value = extracted_data.get("severity")
-            session.history_of_present_illness.severity = field_value or (payload.answer if needs_review else None) or session.history_of_present_illness.severity
-        elif current_field == "character":
-            field_value = extracted_data.get("character")
-            session.history_of_present_illness.character = field_value or (payload.answer if needs_review else None) or session.history_of_present_illness.character
-        elif current_field == "associated_symptoms":
-            field_value = extracted_data.get("associated_symptoms")
-            if field_value and isinstance(field_value, list):
-                session.history_of_present_illness.associated_symptoms = field_value
-            elif field_value and isinstance(field_value, str):
-                session.history_of_present_illness.associated_symptoms = [s.strip() for s in field_value.split(",") if s.strip()] or [field_value]
-            elif needs_review:
-                session.history_of_present_illness.associated_symptoms = [payload.answer]
+    # Rule-based free text extraction for resilience: fills the CURRENT slot
+    # (or re-captures an already-collected concept). It never pre-captures a
+    # later question, so the profile's question sequence stays deterministic.
+    text_concepts = extract_concepts_from_payload(
+        answer=payload.answer,
+        extracted_llm_data=concepts,
+        current_concept=current_concept,
+        domain=session.presentation_domain
+    )
+    for rc_k, rc_v in text_concepts.items():
+        if _usable_concept_value(rc_v) and not _usable_concept_value(concepts.get(rc_k)) \
+                and (rc_k == current_concept or _usable_concept_value(session.collected_concepts.get(rc_k))):
+            concepts[rc_k] = rc_v
 
-    else:
-        # LLM returned nothing usable — store raw answer as fallback so interview advances
-        if current_field == "chief_complaint":
-            session.chief_complaint = payload.answer
-        elif current_field == "onset":
-            session.history_of_present_illness.onset = payload.answer
-        elif current_field == "duration":
-            session.history_of_present_illness.duration = payload.answer
-        elif current_field == "severity":
-            session.history_of_present_illness.severity = payload.answer
-        elif current_field == "character":
-            session.history_of_present_illness.character = payload.answer
-        elif current_field == "associated_symptoms":
-            session.history_of_present_illness.associated_symptoms = [payload.answer]
+    # Concept name normalization
+    if "complaint" in concepts and "primary_symptom" not in concepts:
+        concepts["primary_symptom"] = concepts["complaint"]
+    if "primary_symptom" in concepts and "chief_complaint" not in concepts:
+        concepts["chief_complaint"] = concepts["primary_symptom"]
+
+
+    # Domain authority is the engine's: the LLM suggestion is accepted only if
+    # it names a known domain; otherwise deterministic keyword classification
+    # decides. The domain is fixed on the first turn and never switched mid-
+    # interview, so question sequence stays stable.
+    authoritative_domain = extracted_domain if extracted_domain in ALL_DOMAINS else None
+    if not authoritative_domain:
+        authoritative_domain = classify_presentation_domain(
+            f"{payload.answer} {session.chief_complaint or ''}".strip()
+        )
+    if session.presentation_domain is None:
+        session.presentation_domain = authoritative_domain
+    domain_profile = get_presentation_profile(session.presentation_domain)
+
+    # Guarantee progress: the concept this question asked must end up with a
+    # usable value. If structured extraction missed it, store the raw patient
+    # answer as a needs_review fallback so the deterministic engine advances.
+    if _usable_concept_value(payload.answer) and not _usable_concept_value(concepts.get(current_concept)):
+        concepts[current_concept] = payload.answer.strip()
+    if not llm_captured_current and _usable_concept_value(concepts.get(current_concept)):
+        needs_review = True
+
+    newly_collected = False
+    for concept, value in concepts.items():
+        if _usable_concept_value(value) and not _usable_concept_value(session.collected_concepts.get(concept)):
+            session.collected_concepts[concept] = value
+            if concept == current_concept:
+                newly_collected = True
+
+    detected_docs = extract_mentioned_documents(payload.answer)
+    session.mentioned_documents = list(dict.fromkeys(
+        [*(session.mentioned_documents or []), *mentioned, *detected_docs]
+    ))
+
+    # Mirror adaptive concepts into legacy fields (chief_complaint + HPI) so
+    # D02/D03, department routing, and the summary screen work unchanged.
+    bridge_concepts_to_legacy(session)
 
     answer_record = AnswerRecord(
         question=current_field,
@@ -363,28 +592,37 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     )
     session.answer_records.append(answer_record)
 
-    # Advance interview step using the rules engine (LLM cannot control this)
-    next_field = None
-    for field in REQUIRED_FIELDS_ORDER:
-        if get_field_value(session, field) is None:
-            next_field = field
-            break
+    # Progress bookkeeping: only an answer that actually captured the asked
+    # concept advances the interview. A blank/unusable answer stays on the same
+    # question (neither asked_questions nor the counter move, so the engine
+    # re-selects the same question and no cap can be consumed by empty answers).
+    if newly_collected:
+        session.adaptive_question_count += 1
+        if current_concept not in session.asked_questions:
+            session.asked_questions.append(current_concept)
 
-    if next_field:
-        session.interview_step = next_field
-        session.interview_complete = False
-    else:
-        session.interview_complete = True
-        session.interview_step = "complete"
+    if newly_collected:
+        pending_next = _select_pending(session)
+        sufficient = evaluate_sufficiency(session)
+        if pending_next is None or sufficient:
+            session.interview_complete = True
+            session.interview_step = "complete"
+        else:
+            session.interview_step = pending_next["legacy_field"] or pending_next["concept_key"]
+            session.interview_complete = False
 
     db_save_session(session)
 
-    next_question = get_next_question(session) if not session.interview_complete else None
     return AnswerResponse(
-        next_question=next_question,
+        next_question=_next_question_text(session),
         session_complete=session.interview_complete,
         red_flag=False,
         needs_review=needs_review,
+        presentation_domain=session.presentation_domain,
+        interview_status=_interview_status(session),
+        questions_asked=session.adaptive_question_count,
+        adaptive_question_limit=domain_profile.max_questions,
+        mentioned_documents=session.mentioned_documents,
     )
 
 @router.post("/{session_id}/upload", response_model=UploadResponse)

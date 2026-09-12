@@ -70,6 +70,12 @@ class Session(BaseModel):
     safety_detail: List[str] = Field(default_factory=list)
     department: Optional[str] = Field(default=None)
     queue_token: Optional[str] = Field(default=None)
+    presentation_domain: Optional[str] = Field(default=None)
+    collected_concepts: Dict[str, Any] = Field(default_factory=dict)
+    asked_questions: List[str] = Field(default_factory=list)
+    adaptive_question_count: int = Field(default=0)
+    mentioned_documents: List[str] = Field(default_factory=list)
+    adaptive: bool = Field(default=False)
 
 class HealthResponse(BaseModel):
     status: str = "ok"

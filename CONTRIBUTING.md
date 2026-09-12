@@ -35,7 +35,7 @@ We follow a strict Test-Driven Development (TDD) workflow:
 ## 3. Pull Request Guidelines
 
 Before submitting a Pull Request:
-- [ ] All 164 backend tests pass without errors.
+- [ ] All 179 backend tests pass without errors.
 - [ ] The 9/9 clinical invariant audit passes completely.
 - [ ] Frontend builds without TypeScript errors (`npx tsc --noEmit`).
 - [ ] No secrets, keys, or temporary files are committed.

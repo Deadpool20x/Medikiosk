@@ -66,19 +66,22 @@ def client():
         os.environ.pop("DATABASE_PATH", None)
 
 
-class _FakeProvider:
-    provider_name = "groq"
-
-
-def _fake_extract(provider, field, ans):
+def _fake_extract_case(ans, current_concept=None, domain_hint=None):
+    values = {
+        "primary_symptom": "stomach pain",
+        "onset": "2 days ago",
+        "duration": "2 days",
+        "severity": "moderate",
+        "character": "sharp",
+        "associated_symptoms": ["nausea"],
+    }
     return {
-        "chief_complaint": {"complaint": "stomach pain", "confidence": 0.9},
-        "onset": {"onset": "2 days ago", "confidence": 0.9},
-        "duration": {"duration": "2 days", "confidence": 0.9},
-        "severity": {"severity": "moderate", "confidence": 0.9},
-        "character": {"character": "sharp", "confidence": 0.9},
-        "associated_symptoms": {"associated_symptoms": ["nausea"], "confidence": 0.9},
-    }[field]
+        "domain": "general",
+        "concepts": {current_concept: values.get(current_concept)},
+        "confidence": 0.9,
+        "mentioned_documents": [],
+        "provider": "groq",
+    }
 
 
 def _start_consent_code(client, name="Audit Patient"):
@@ -94,14 +97,13 @@ def _start_consent_code(client, name="Audit Patient"):
 
 
 def _complete_interview(client, sid, complaint="stomach pain"):
-    def _extract(p, field, ans):
-        d = _fake_extract(p, field, ans)
-        if field == "chief_complaint":
-            d = {"complaint": complaint, "confidence": 0.9}
+    def _extract(ans, current_concept=None, domain_hint=None):
+        d = _fake_extract_case(ans, current_concept, domain_hint)
+        if current_concept == "primary_symptom":
+            d["concepts"]["primary_symptom"] = complaint
         return d
 
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_extract):
+    with patch.object(session_router, "extract_case", side_effect=_extract):
         for ans in [complaint, "2 days ago", "2 days", "moderate", "sharp", "nausea"]:
             r = client.post(f"/session/{sid}/answer", json={"answer": ans})
             assert r.status_code == 200

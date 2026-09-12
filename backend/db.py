@@ -45,6 +45,12 @@ def init_db(db_path: Optional[str] = None) -> None:
                     safety_detail_json TEXT NOT NULL DEFAULT '[]',
                     department TEXT,
                     queue_token TEXT,
+                    presentation_domain TEXT,
+                    collected_concepts_json TEXT NOT NULL DEFAULT '{}',
+                    asked_questions_json TEXT NOT NULL DEFAULT '[]',
+                    adaptive_question_count INTEGER NOT NULL DEFAULT 0,
+                    mentioned_documents_json TEXT NOT NULL DEFAULT '[]',
+                    adaptive INTEGER NOT NULL DEFAULT 1,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
@@ -75,6 +81,12 @@ def _migrate_sessions_table(conn: sqlite3.Connection) -> None:
         "safety_detail_json": "TEXT NOT NULL DEFAULT '[]'",
         "department": "TEXT",
         "queue_token": "TEXT",
+        "presentation_domain": "TEXT",
+        "collected_concepts_json": "TEXT NOT NULL DEFAULT '{}'",
+        "asked_questions_json": "TEXT NOT NULL DEFAULT '[]'",
+        "adaptive_question_count": "INTEGER NOT NULL DEFAULT 0",
+        "mentioned_documents_json": "TEXT NOT NULL DEFAULT '[]'",
+        "adaptive": "INTEGER NOT NULL DEFAULT 1",
     }
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(sessions)")}
     for col, ddl in columns.items():
@@ -90,8 +102,9 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                     session_id, patient_json, language, visit_type, consent_given, patient_code,
                     interview_step, interview_complete, document_intake_done, chief_complaint, hpi_json, documents_json,
                     doctor_review_json, answer_records_json, raw_answers_json, safety_flagged,
-                    safety_flag_time, safety_detail_json, department, queue_token, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    safety_flag_time, safety_detail_json, department, queue_token,
+                    presentation_domain, collected_concepts_json, asked_questions_json, adaptive_question_count, mentioned_documents_json, adaptive, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(session_id) DO UPDATE SET
                     patient_json = excluded.patient_json,
                     language = excluded.language,
@@ -112,6 +125,12 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                     safety_detail_json = excluded.safety_detail_json,
                     department = excluded.department,
                     queue_token = excluded.queue_token,
+                    presentation_domain = excluded.presentation_domain,
+                    collected_concepts_json = excluded.collected_concepts_json,
+                    asked_questions_json = excluded.asked_questions_json,
+                    adaptive_question_count = excluded.adaptive_question_count,
+                    mentioned_documents_json = excluded.mentioned_documents_json,
+                    adaptive = excluded.adaptive,
                     updated_at = CURRENT_TIMESTAMP;
             """, (
                 session.session_id,
@@ -134,6 +153,12 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                 json.dumps(session.safety_detail),
                 session.department,
                 session.queue_token,
+                session.presentation_domain,
+                json.dumps(session.collected_concepts),
+                json.dumps(session.asked_questions),
+                int(session.adaptive_question_count),
+                json.dumps(session.mentioned_documents),
+                int(session.adaptive),
             ))
     finally:
         conn.close()
@@ -155,6 +180,14 @@ def get_session(session_id: str, db_path: Optional[str] = None) -> Optional[Sess
         raw_answers_data = json.loads(row["raw_answers_json"])
         safety_flag_time_str = row["safety_flag_time"]
         safety_detail_data = json.loads(row["safety_detail_json"])
+
+        row_keys = row.keys()
+        presentation_domain = row["presentation_domain"] if "presentation_domain" in row_keys else None
+        collected_concepts = json.loads(row["collected_concepts_json"]) if "collected_concepts_json" in row_keys and row["collected_concepts_json"] else {}
+        asked_questions = json.loads(row["asked_questions_json"]) if "asked_questions_json" in row_keys and row["asked_questions_json"] else []
+        adaptive_question_count = int(row["adaptive_question_count"]) if "adaptive_question_count" in row_keys and row["adaptive_question_count"] is not None else 0
+        mentioned_documents = json.loads(row["mentioned_documents_json"]) if "mentioned_documents_json" in row_keys and row["mentioned_documents_json"] else []
+        adaptive = bool(row["adaptive"]) if "adaptive" in row_keys and row["adaptive"] is not None else False
         
         return Session(
             session_id=row["session_id"],
@@ -177,7 +210,14 @@ def get_session(session_id: str, db_path: Optional[str] = None) -> Optional[Sess
             safety_detail=safety_detail_data,
             department=row["department"],
             queue_token=row["queue_token"],
+            presentation_domain=presentation_domain,
+            collected_concepts=collected_concepts,
+            asked_questions=asked_questions,
+            adaptive_question_count=adaptive_question_count,
+            mentioned_documents=mentioned_documents,
+            adaptive=adaptive,
         )
+
     finally:
         conn.close()
 

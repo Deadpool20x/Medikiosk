@@ -128,7 +128,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 Verify your installation using the built-in test suites:
 
 ```bash
-# Run the complete automated backend test suite (164 tests)
+# Run the complete automated backend test suite (179 tests)
 pytest backend/tests -v
 
 # Run the 9-point state invariant audit

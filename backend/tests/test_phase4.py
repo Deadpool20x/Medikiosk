@@ -20,19 +20,22 @@ def client():
         os.environ.pop("DATABASE_PATH", None)
 
 
-class _FakeProvider:
-    provider_name = "gemini"
-
-
-def _fake_extract(provider, field, ans):
+def _fake_extract_case(ans, current_concept=None, domain_hint=None):
+    values = {
+        "primary_symptom": "katishoola",
+        "onset": "1 week ago",
+        "duration": "1 week",
+        "severity": "moderate",
+        "character": "dull",
+        "associated_symptoms": ["stiffness"],
+    }
     return {
-        "chief_complaint": {"complaint": "katishoola", "confidence": 0.9},
-        "onset": {"onset": "1 week ago", "confidence": 0.9},
-        "duration": {"duration": "1 week", "confidence": 0.9},
-        "severity": {"severity": "moderate", "confidence": 0.9},
-        "character": {"character": "dull", "confidence": 0.9},
-        "associated_symptoms": {"associated_symptoms": ["stiffness"], "confidence": 0.9},
-    }[field]
+        "domain": "general",
+        "concepts": {current_concept: values.get(current_concept)},
+        "confidence": 0.9,
+        "mentioned_documents": [],
+        "provider": "gemini",
+    }
 
 
 def _start(client):
@@ -84,8 +87,7 @@ def test_token_403_pending_review(client):
         return json.dumps({"medicine": None, "confidence": 0.9})
 
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     with patch.object(ocr_provider.GeminiVisionProvider, "is_configured", return_value=True), \
          patch.object(ocr_provider.GeminiVisionProvider, "extract_prescription", _fake_ocr_unreadable):
@@ -100,8 +102,7 @@ def test_token_403_pending_review(client):
 
 def test_token_issue_success_persisted_and_idempotent(client):
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     _finish_docs(client, sid)
     r = client.post(f"/session/{sid}/token")
@@ -123,8 +124,7 @@ def test_token_sequential_per_department(client):
     first = client.post("/session/start", json={"patient": {"name": "A", "age": 30, "gender": "m"}}).json()["session_id"]
     client.post(f"/session/{first}/consent", json={"consent_given": True})
     client.post(f"/session/{first}/patient-code")
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, first)
     _finish_docs(client, first)
     t1 = client.post(f"/session/{first}/token").json()["token"]
@@ -132,8 +132,7 @@ def test_token_sequential_per_department(client):
     second = client.post("/session/start", json={"patient": {"name": "B", "age": 31, "gender": "f"}}).json()["session_id"]
     client.post(f"/session/{second}/consent", json={"consent_given": True})
     client.post(f"/session/{second}/patient-code")
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, second)
     _finish_docs(client, second)
     t2 = client.post(f"/session/{second}/token").json()["token"]
@@ -143,13 +142,12 @@ def test_token_sequential_per_department(client):
 
 def test_department_routing_panchakarma(client):
     sid = _start(client)
-    def _fake_extract_pk(provider, field, ans):
-        d = _fake_extract(provider, field, ans)
-        if field == "chief_complaint":
-            d = {"complaint": "Sthaulya", "confidence": 0.9}
+    def _fake_extract_pk_case(ans, current_concept=None, domain_hint=None):
+        d = _fake_extract_case(ans, current_concept, domain_hint)
+        if current_concept == "primary_symptom":
+            d["concepts"]["primary_symptom"] = "Sthaulya"
         return d
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract_pk):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_pk_case):
         for ans in ["Sthaulya", "1 week ago", "1 week", "moderate", "dull", "stiffness"]:
             client.post(f"/session/{sid}/answer", json={"answer": ans})
     _finish_docs(client, sid)
@@ -176,8 +174,7 @@ def test_d01_queue_excludes_non_queued_and_flagged(client):
     client.post(f"/session/{flagged}/answer", json={"answer": "chest pain"})
 
     safe = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, safe)
     _finish_docs(client, safe)
     client.post(f"/session/{safe}/token")
@@ -190,20 +187,18 @@ def test_d01_queue_excludes_non_queued_and_flagged(client):
 
 def test_d01_department_filter_and_status(client):
     ky = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, ky)
     _finish_docs(client, ky)
     client.post(f"/session/{ky}/token")
 
     pk = _start(client)
-    def _fake_extract_pk(provider, field, ans):
-        d = _fake_extract(provider, field, ans)
-        if field == "chief_complaint":
-            d = {"complaint": "Sthaulya", "confidence": 0.9}
+    def _fake_extract_pk_case(ans, current_concept=None, domain_hint=None):
+        d = _fake_extract_case(ans, current_concept, domain_hint)
+        if current_concept == "primary_symptom":
+            d["concepts"]["primary_symptom"] = "Sthaulya"
         return d
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract_pk):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_pk_case):
         for ans in ["Sthaulya", "1 week ago", "1 week", "moderate", "dull", "stiffness"]:
             client.post(f"/session/{pk}/answer", json={"answer": ans})
     _finish_docs(client, pk)
@@ -222,8 +217,7 @@ def test_d01_department_filter_and_status(client):
 
 def test_d02_doctor_session_detail(client):
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     _finish_docs(client, sid)
     client.post(f"/session/{sid}/token")
@@ -238,8 +232,7 @@ def test_d02_doctor_session_detail(client):
 
 def test_d03_doctor_edit_persists_and_marks_edited(client):
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     _finish_docs(client, sid)
     client.post(f"/session/{sid}/token")
@@ -261,8 +254,7 @@ def test_d03_doctor_edit_persists_and_marks_edited(client):
 
 def test_d03_doctor_confirm_case(client):
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     _finish_docs(client, sid)
     client.post(f"/session/{sid}/token")
@@ -279,8 +271,7 @@ def test_d03_doctor_confirm_case(client):
 
 def test_refresh_resume_returns_token_and_department(client):
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     _finish_docs(client, sid)
     token = client.post(f"/session/{sid}/token").json()["token"]
@@ -293,8 +284,7 @@ def test_refresh_resume_returns_token_and_department(client):
 def test_no_fake_queue_stats_without_token(client):
     # sessions completed but never issued a token must NOT appear in queue
     sid = _start(client)
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         _complete_interview(client, sid)
     q = client.get("/doctor/queue").json()
     assert sid not in {x["session_id"] for x in q}

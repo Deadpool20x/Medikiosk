@@ -151,3 +151,26 @@ MediKiosk utilizes an optimized SQLite database engine (`backend/db.py`) designe
 - **Busy Timeout**: `PRAGMA busy_timeout = 30000;` ensures queries wait up to 30 seconds for locks rather than failing immediately under heavy load.
 - **Query Indexes**: Dedicated indexes on `(status, safety_flagged)`, `(department)`, and `(patient_code)` guarantee sub-millisecond lookups for live doctor queues.
 - **Atomic Token Generation**: Queue token increments occur inside an explicit `IMMEDIATE` transaction to prevent race conditions or duplicate token issuance.
+
+---
+
+## 7. Adaptive Case-Taking Engine Foundation (Phase 1)
+
+The Adaptive Case-Taking Engine (`backend/rules/adaptive_interview.py`) replaces rigid static questionnaires with deterministic, domain-aware intake pathways while maintaining strict clinical safety and kiosk latency guarantees.
+
+### 7.1 Architectural Invariants
+1. **Deterministic Engine Authority**: The LLM functions purely as an entity and concept extractor. Presentation classification, next-question prioritization, sufficiency evaluation, and stopping conditions are governed 100% by deterministic code.
+2. **Authoritative Safety Precedence**: Red-flag emergency screening (`backend/rules/safety_rules.py`) executes synchronously before any adaptive logic. Any red-flag match halts adaptive questioning instantly.
+3. **Multi-Concept Awareness**: Single turns containing multiple clinical details (e.g., *"knee pain for 3 weeks, severe 8/10 on stairs"*) populate multiple concepts simultaneously (`site`, `duration`, `severity`, `aggravating_factors`), preventing redundant questions.
+4. **Bounded Sufficiency & Hard Cap**: Intake concludes when all required domain concepts are gathered (minimum 3 core concepts), or when the strict hard cap of `MAX_ADAPTIVE_QUESTIONS = 5` is reached, preventing interview fatigue.
+5. **Full Backward Compatibility**: The engine continuously bridges structured concepts to legacy HPI attributes (`onset`, `duration`, `severity`, `character`, `associated_symptoms`) and `chief_complaint`, ensuring existing Doctor Workspace views (D01-D04) and queue tokens operate unchanged.
+
+### 7.2 Pilot Presentation Domains
+The engine defines six intake presentation profiles:
+- **Musculoskeletal & Joint**: Focuses on `site`, `duration`, `aggravating_factors`, and `relieving_factors`.
+- **Respiratory**: Evaluates `duration`, `cough_character`, and `associated_symptoms`.
+- **Digestive & Gastrointestinal**: Evaluates `duration`, `food_relationship`, and `bowel_habits`.
+- **Dermatological**: Evaluates `site`, `duration`, `itching_severity`, and contact `triggers`.
+- **Metabolic & General Wellness**: Evaluates `duration`, `energy_and_thirst`, and `weight_changes`.
+- **General Intake**: Standard fallback profile ensuring full coverage when presentations are non-specific.
+

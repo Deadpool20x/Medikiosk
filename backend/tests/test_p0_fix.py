@@ -31,19 +31,22 @@ def client():
         os.environ.pop("DATABASE_PATH", None)
 
 
-class _FakeProvider:
-    provider_name = "gemini"
-
-
-def _fake_extract(provider, field, ans):
+def _fake_extract_case(ans, current_concept=None, domain_hint=None):
+    values = {
+        "primary_symptom": "katishoola",
+        "onset": "1 week ago",
+        "duration": "1 week",
+        "severity": "moderate",
+        "character": "dull",
+        "associated_symptoms": ["stiffness"],
+    }
     return {
-        "chief_complaint": {"complaint": "katishoola", "confidence": 0.9},
-        "onset": {"onset": "1 week ago", "confidence": 0.9},
-        "duration": {"duration": "1 week", "confidence": 0.9},
-        "severity": {"severity": "moderate", "confidence": 0.9},
-        "character": {"character": "dull", "confidence": 0.9},
-        "associated_symptoms": {"associated_symptoms": ["stiffness"], "confidence": 0.9},
-    }[field]
+        "domain": "general",
+        "concepts": {current_concept: values.get(current_concept)},
+        "confidence": 0.9,
+        "mentioned_documents": [],
+        "provider": "gemini",
+    }
 
 
 _INTERVIEW = ["katishoola", "1 week ago", "1 week", "moderate", "dull", "stiffness"]
@@ -60,8 +63,7 @@ def _start(client, name="Fix Patient"):
 
 
 def _complete_interview(client, sid):
-    with patch.object(session_router, "get_llm_provider", return_value=_FakeProvider()), \
-         patch.object(session_router, "extract_field", side_effect=_fake_extract):
+    with patch.object(session_router, "extract_case", side_effect=_fake_extract_case):
         for ans in _INTERVIEW:
             r = client.post(f"/session/{sid}/answer", json={"answer": ans})
             assert r.status_code == 200
