@@ -14,10 +14,16 @@ from backend.rules.adaptive_interview import (
     classify_presentation_domain,
     extract_mentioned_documents,
     extract_concepts_from_payload,
+    extract_concepts_from_text,
     select_next_question,
+    evaluate_conversational_sufficiency,
     evaluate_sufficiency,
     bridge_concepts_to_legacy,
     get_presentation_profile,
+    get_domain_knowledge,
+    get_fallback_question,
+    validate_llm_proposal,
+    build_conversation_context,
     DOMAIN_GENERAL,
 )
 from backend.rules.interview_rules import get_next_question, get_field_value, REQUIRED_FIELDS_ORDER
@@ -28,6 +34,8 @@ from backend.services.llm_provider import (
     extract_field,
     get_llm_provider,
     iter_llm_providers,
+    generate_adaptive_turn,
+    AdaptiveTurnProposal,
 )
 from backend.services.ocr_provider import run_document_ocr, OCRUnavailableError, OCR_CONFIDENCE_THRESHOLD
 from backend.services.documents import correct_document
@@ -117,6 +125,13 @@ def _select_pending(session: Session) -> Optional[Dict[str, Any]]:
 
 
 def _next_question_text(session: Session) -> Optional[str]:
+    if session.interview_complete or session.safety_flagged:
+        return None
+    if getattr(session, "adaptive", False):
+        if getattr(session, "current_pending_question", None):
+            return session.current_pending_question
+        fallback = get_fallback_question(session)
+        return fallback["text"]
     pending = _select_pending(session)
     return pending["question_text"] if pending else None
 
@@ -218,12 +233,9 @@ class SessionResponse(BaseModel):
 @router.post("/start", response_model=StartSessionResponse)
 async def start_session(payload: StartSessionRequest):
     session_id = str(uuid.uuid4())
-    
-    use_adaptive = False
-    if payload.adaptive is True:
-        use_adaptive = True
-    elif payload.visit_type in ("adaptive", "pilot"):
-        use_adaptive = True
+    use_adaptive = True
+        if payload.adaptive is False:
+            use_adaptive = False
 
     session = Session(
         session_id=session_id,
@@ -243,10 +255,17 @@ async def start_session(payload: StartSessionRequest):
         presentation_domain=None,
         collected_concepts={},
         asked_questions=[],
+        asked_concepts=[],
+        current_pending_question=None,
         adaptive_question_count=0,
         mentioned_documents=[],
         adaptive=use_adaptive,
     )
+    if use_adaptive:
+        initial_q = get_fallback_question(session, "primary_symptom")
+        session.current_pending_question = initial_q["text"]
+        session.asked_questions = [initial_q["text"]]
+        session.asked_concepts = ["primary_symptom"]
     db_save_session(session)
     return StartSessionResponse(session_id=session_id)
 
@@ -316,7 +335,7 @@ async def get_session(session_id: str):
         doctor_review=session.doctor_review.model_dump(),
         answer_records=[ar.model_dump(mode="json") for ar in session.answer_records],
         raw_answers=session.raw_answers,
-        next_question=_next_question_text(session),
+        next_question=next_question,
         safety_flagged=session.safety_flagged,
         safety_flag_time=session.safety_flag_time.isoformat() if session.safety_flag_time else None,
         safety_detail=session.safety_detail,
@@ -499,92 +518,144 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
             interview_status="complete" if session.interview_complete else "in_progress",
         )
 
-    # ── Adaptive Engine Execution Path ─────────────────────────────────────
-    # Determine which adaptive concept the patient is currently answering.
-    pending = _select_pending(session)
-    if pending and (pending["legacy_field"] or pending["concept_key"]) == current_field:
-        current_concept = pending["concept_key"]
+    # ── Adaptive Conversational Interviewer Execution Path ─────────────────
+    if session.asked_concepts:
+        current_concept = session.asked_concepts[-1]
     else:
-        current_concept = _concept_from_step(current_field)
+        current_concept = "primary_symptom"
 
+    provider_used = None
+    confidence = 0.85
+    needs_review = False
+    new_question_text = None
+    new_target_concept = None
+
+    # Step 1: Formulate bounded context
+    context = build_conversation_context(session, payload.answer)
+
+    # Step 2: LLM Interpretation & Follow-up Proposal
+    llm_result = None
+    try:
+        llm_result = await generate_adaptive_turn(context)
+        provider_used = llm_result.get("provider")
+        confidence = llm_result.get("confidence", 0.85)
+    except Exception:
+        # Fallback to extract_case if mocked in legacy tests
+        try:
+            legacy_case = await extract_case(payload.answer, current_concept, session.presentation_domain)
+            llm_result = {
+                "case_update": {
+                    "presentation": legacy_case.get("domain"),
+                    "concepts": legacy_case.get("concepts", {}),
+                    "mentioned_documents": legacy_case.get("mentioned_documents", []),
+                },
+                "next_question": None,
+                "status": "continue",
+                "confidence": legacy_case.get("confidence", 0.8),
+                "provider": legacy_case.get("provider"),
+            }
+            provider_used = legacy_case.get("provider")
+            confidence = legacy_case.get("confidence", 0.8)
+        except Exception:
+            needs_review = True
+
+    # Step 3: Concept extraction and case state update
     concepts: Dict[str, Any] = {}
     extracted_domain = None
-    provider_used = None
-    confidence = None
     mentioned: List[str] = []
-    needs_review = False
 
-    try:
-        result = await extract_case(payload.answer, current_concept, session.presentation_domain)
-        provider_used = result.get("provider")
-        confidence = result.get("confidence")
-        extracted_domain = result.get("domain")
-        concepts = {k: v for k, v in (result.get("concepts") or {}).items() if _usable_concept_value(v)}
-        mentioned = [str(d) for d in (result.get("mentioned_documents") or []) if d and str(d).strip()]
-    except Exception:
-        needs_review = True
-    llm_captured_current = _usable_concept_value(concepts.get(current_concept))
+    if llm_result and isinstance(llm_result, dict):
+        case_up = llm_result.get("case_update") or {}
+        extracted_concepts = case_up.get("concepts") or {}
+        concepts = {k: v for k, v in extracted_concepts.items() if _usable_concept_value(v)}
+        extracted_domain = case_up.get("presentation")
+        mentioned = [str(d) for d in (case_up.get("mentioned_documents") or []) if d and str(d).strip()]
 
-    # Rule-based free text extraction for resilience: fills the CURRENT slot
-    # (or re-captures an already-collected concept). It never pre-captures a
-    # later question, so the profile's question sequence stays deterministic.
-    text_concepts = extract_concepts_from_payload(
-        answer=payload.answer,
-        extracted_llm_data=concepts,
-        current_concept=current_concept,
-        domain=session.presentation_domain
-    )
-    for rc_k, rc_v in text_concepts.items():
-        if _usable_concept_value(rc_v) and not _usable_concept_value(concepts.get(rc_k)) \
-                and (rc_k == current_concept or _usable_concept_value(session.collected_concepts.get(rc_k))):
-            concepts[rc_k] = rc_v
+    # Heuristic free-text extraction for resilience
+    text_concepts = extract_concepts_from_text(payload.answer, domain=session.presentation_domain)
+    for hk, hv in text_concepts.items():
+        if _usable_concept_value(hv) and not _usable_concept_value(concepts.get(hk)):
+            concepts[hk] = hv
 
-    # Concept name normalization
+    # Normalization
     if "complaint" in concepts and "primary_symptom" not in concepts:
         concepts["primary_symptom"] = concepts["complaint"]
     if "primary_symptom" in concepts and "chief_complaint" not in concepts:
         concepts["chief_complaint"] = concepts["primary_symptom"]
 
-
-    # Domain authority is the engine's: the LLM suggestion is accepted only if
-    # it names a known domain; otherwise deterministic keyword classification
-    # decides. The domain is fixed on the first turn and never switched mid-
-    # interview, so question sequence stays stable.
-    authoritative_domain = extracted_domain if extracted_domain in ALL_DOMAINS else None
-    if not authoritative_domain:
-        authoritative_domain = classify_presentation_domain(
-            f"{payload.answer} {session.chief_complaint or ''}".strip()
-        )
-    if session.presentation_domain is None:
-        session.presentation_domain = authoritative_domain
-    domain_profile = get_presentation_profile(session.presentation_domain)
-
-    # Guarantee progress: the concept this question asked must end up with a
-    # usable value. If structured extraction missed it, store the raw patient
-    # answer as a needs_review fallback so the deterministic engine advances.
+    # Ensure current concept is captured
     if _usable_concept_value(payload.answer) and not _usable_concept_value(concepts.get(current_concept)):
         concepts[current_concept] = payload.answer.strip()
-    if not llm_captured_current and _usable_concept_value(concepts.get(current_concept)):
-        needs_review = True
+        if not llm_result:
+            needs_review = True
 
-    newly_collected = False
-    for concept, value in concepts.items():
-        if _usable_concept_value(value) and not _usable_concept_value(session.collected_concepts.get(concept)):
-            session.collected_concepts[concept] = value
-            if concept == current_concept:
-                newly_collected = True
+    # Presentation domain update
+    if extracted_domain in ALL_DOMAINS and (not session.presentation_domain or session.presentation_domain == DOMAIN_GENERAL):
+        session.presentation_domain = extracted_domain
+    elif not session.presentation_domain or session.presentation_domain == DOMAIN_GENERAL:
+        detected = classify_presentation_domain(f"{payload.answer} {session.chief_complaint or ''}")
+        if detected != DOMAIN_GENERAL:
+            session.presentation_domain = detected
 
-    detected_docs = extract_mentioned_documents(payload.answer)
-    session.mentioned_documents = list(dict.fromkeys(
-        [*(session.mentioned_documents or []), *mentioned, *detected_docs]
-    ))
+    # Update collected concepts in session
+    for c_k, c_v in concepts.items():
+        if _usable_concept_value(c_v):
+            session.collected_concepts[c_k] = c_v
 
-    # Mirror adaptive concepts into legacy fields (chief_complaint + HPI) so
-    # D02/D03, department routing, and the summary screen work unchanged.
+    # Documents
+    doc_matches = extract_mentioned_documents(payload.answer)
+    session.mentioned_documents = list(dict.fromkeys([*(session.mentioned_documents or []), *mentioned, *doc_matches]))
+
+    # Step 4: Validate LLM Proposal
+    validation = None
+    is_valid = False
+    llm_status = llm_result.get("status", "continue") if llm_result else None
+
+    if llm_result and isinstance(llm_result, dict):
+        from types import SimpleNamespace
+        next_q_data = llm_result.get("next_question")
+        dummy_prop = SimpleNamespace(
+            case_update=SimpleNamespace(concepts=concepts),
+            next_question=SimpleNamespace(**next_q_data) if next_q_data else None,
+            status=llm_status,
+        )
+        validation = validate_llm_proposal(dummy_prop, session, session.presentation_domain)
+        if validation.valid and dummy_prop.next_question:
+            is_valid = True
+            new_question_text = dummy_prop.next_question.text
+            new_target_concept = dummy_prop.next_question.target_concept
+        elif validation.valid and dummy_prop.status == "sufficient":
+            is_valid = True
+        elif not validation.valid:
+            needs_review = True
+
+    # Step 5: Sufficiency evaluation & Hard Cap
+    session.adaptive_question_count += 1
+    is_sufficient = evaluate_conversational_sufficiency(session, llm_status)
+
+    if is_sufficient or session.adaptive_question_count >= MAX_ADAPTIVE_QUESTIONS:
+        session.interview_complete = True
+        session.interview_step = "complete"
+        session.current_pending_question = None
+        new_question_text = None
+    else:
+        if not is_valid or not new_question_text:
+            fallback = get_fallback_question(session)
+            new_question_text = fallback["text"]
+            new_target_concept = fallback["target_concept"]
+            needs_review = True
+
+        session.interview_complete = False
+        session.interview_step = new_target_concept
+        session.current_pending_question = new_question_text
+        session.asked_questions.append(new_question_text)
+        session.asked_concepts.append(new_target_concept)
+
+    # Step 6: Bridge to Legacy Schema & Save
     bridge_concepts_to_legacy(session)
 
     answer_record = AnswerRecord(
-        question=current_field,
+        question=current_concept,
         answer=payload.answer,
         provider=provider_used,
         confidence=confidence,
@@ -592,36 +663,17 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     )
     session.answer_records.append(answer_record)
 
-    # Progress bookkeeping: only an answer that actually captured the asked
-    # concept advances the interview. A blank/unusable answer stays on the same
-    # question (neither asked_questions nor the counter move, so the engine
-    # re-selects the same question and no cap can be consumed by empty answers).
-    if newly_collected:
-        session.adaptive_question_count += 1
-        if current_concept not in session.asked_questions:
-            session.asked_questions.append(current_concept)
-
-    if newly_collected:
-        pending_next = _select_pending(session)
-        sufficient = evaluate_sufficiency(session)
-        if pending_next is None or sufficient:
-            session.interview_complete = True
-            session.interview_step = "complete"
-        else:
-            session.interview_step = pending_next["legacy_field"] or pending_next["concept_key"]
-            session.interview_complete = False
-
     db_save_session(session)
 
     return AnswerResponse(
-        next_question=_next_question_text(session),
+        next_question=new_question_text,
         session_complete=session.interview_complete,
         red_flag=False,
         needs_review=needs_review,
         presentation_domain=session.presentation_domain,
         interview_status=_interview_status(session),
         questions_asked=session.adaptive_question_count,
-        adaptive_question_limit=domain_profile.max_questions,
+        adaptive_question_limit=MAX_ADAPTIVE_QUESTIONS,
         mentioned_documents=session.mentioned_documents,
     )
 

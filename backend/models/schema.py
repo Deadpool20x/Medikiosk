@@ -73,9 +73,11 @@ class Session(BaseModel):
     presentation_domain: Optional[str] = Field(default=None)
     collected_concepts: Dict[str, Any] = Field(default_factory=dict)
     asked_questions: List[str] = Field(default_factory=list)
+    asked_concepts: List[str] = Field(default_factory=list)
+    current_pending_question: Optional[str] = Field(default=None)
     adaptive_question_count: int = Field(default=0)
     mentioned_documents: List[str] = Field(default_factory=list)
-    adaptive: bool = Field(default=False)
+    adaptive: bool = Field(default=True)
 
 class HealthResponse(BaseModel):
     status: str = "ok"

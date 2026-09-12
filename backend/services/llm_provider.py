@@ -3,7 +3,7 @@ import json
 import logging
 import re
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 
 import httpx
 
@@ -305,6 +305,128 @@ class CaseExtraction(BaseModel):
     concepts: Dict[str, Any] = Field(default_factory=dict)
     confidence: float = Field(default=0.8, ge=0.0, le=1.0)
     mentioned_documents: List[str] = Field(default_factory=list)
+
+
+class CaseUpdate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    presentation: Optional[str] = None
+    concepts: Dict[str, Any] = Field(default_factory=dict)
+    mentioned_documents: List[str] = Field(default_factory=list)
+
+
+class NextQuestionProposal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    text: str
+    target_concept: str
+    reason: str = ""
+    priority: Literal["high", "normal", "optional"] = "normal"
+
+
+class AdaptiveTurnProposal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    case_update: CaseUpdate = Field(default_factory=CaseUpdate)
+    next_question: Optional[NextQuestionProposal] = None
+    status: Literal["continue", "sufficient", "clarify"] = "continue"
+    confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+
+
+async def generate_adaptive_turn(
+    session_context: Dict[str, Any],
+    providers: Optional[List[LLMProvider]] = None,
+) -> Dict[str, Any]:
+    """Generate conversational intake interpretation, structured case updates,
+    and the next patient-facing follow-up question via LLM.
+
+    The LLM acts as the conversational interviewer while strict deterministic
+    guards validate the output before it is accepted.
+    """
+    from backend.rules.adaptive_interview import ALL_DOMAINS, ALL_ALLOWED_CONCEPTS
+
+    allowed_domains = sorted(ALL_DOMAINS)
+    allowed_concepts = sorted(ALL_ALLOWED_CONCEPTS)
+    language = session_context.get("language", "en")
+
+    lang_instructions = {
+        "hi": (
+            "The patient's language is Hindi (hi). Generate next_question.text in simple, "
+            "polite, conversational Hindi (Devanagari script). Keep all concept keys and JSON in English."
+        ),
+        "gu": (
+            "The patient's language is Gujarati (gu). Generate next_question.text in simple, "
+            "polite, conversational Gujarati (Gujarati script). Keep all concept keys and JSON in English."
+        ),
+        "en": (
+            "The patient's language is English (en). Generate next_question.text in clear, "
+            "respectful, non-technical English."
+        ),
+    }.get(language, "Generate next_question.text in clear, respectful, non-technical English.")
+
+    system_prompt = (
+        "You are an empathetic, clinical OPD intake conversational interviewer for MediKiosk. "
+        "Your task is to understand the patient's natural language answer, update structured concepts, "
+        "and propose the next most clinically useful follow-up question.\n\n"
+        "STRICT INVARIANTS:\n"
+        "1. NEVER DIAGNOSE. Never suggest a condition, illness, dosha imbalance, or disease name.\n"
+        "2. NEVER PRESCRIBE OR TREAT. Never recommend medicines, herbs, dosages, treatments, or Panchakarma.\n"
+        "3. AVOID REPETITION. Do NOT ask for information already provided in collected_concepts or conversation_history.\n"
+        "4. ONE CLEAR QUESTION. Propose exactly ONE patient-facing question at a time.\n"
+        f"5. LANGUAGE: {lang_instructions}\n"
+        "6. STRUCTURED JSON OUTPUT ONLY. Respond with valid JSON matching:\n"
+        "{\n"
+        '  "case_update": {\n'
+        f'    "presentation": "one of {json.dumps(allowed_domains)}",\n'
+        f'    "concepts": {{ "concept_key": "patient statement" }},\n'
+        '    "mentioned_documents": ["document mentioned by patient or empty list"]\n'
+        "  },\n"
+        '  "next_question": {\n'
+        '    "text": "The patient-facing question in the requested language",\n'
+        '    "target_concept": "the specific concept being explored",\n'
+        '    "reason": "short clinical reason why this question is helpful",\n'
+        '    "priority": "high|normal|optional"\n'
+        "  },\n"
+        '  "status": "continue|sufficient|clarify",\n'
+        '  "confidence": 0.85\n'
+        "}\n"
+        f"Allowed concept keys: {json.dumps(allowed_concepts)}."
+    )
+
+    user_prompt = (
+        f"Current Session Context:\n{json.dumps(session_context, indent=2)}\n\n"
+        "Analyze the patient's current answer, update collected concepts, and propose the next question."
+    )
+
+    if providers is None:
+        providers = iter_llm_providers()
+
+    last_error: Optional[Exception] = None
+    for provider in providers:
+        try:
+            response = await provider.generate(user_prompt, system_prompt=system_prompt)
+            if not response:
+                raise RuntimeError("Empty response from LLM provider")
+            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
+            data = json.loads(cleaned)
+            parsed = AdaptiveTurnProposal.model_validate(data)
+
+            # Sanitize concepts
+            sanitized_concepts = {}
+            for k, v in parsed.case_update.concepts.items():
+                if k in allowed_concepts and v is not None and str(v).strip():
+                    sanitized_concepts[k] = str(v).strip()
+            parsed.case_update.concepts = sanitized_concepts
+
+            return {
+                "case_update": parsed.case_update.model_dump(),
+                "next_question": parsed.next_question.model_dump() if parsed.next_question else None,
+                "status": parsed.status,
+                "confidence": parsed.confidence,
+                "provider": provider.provider_name,
+            }
+        except Exception as e:
+            last_error = e
+            continue
+
+    raise RuntimeError(f"All LLM providers failed: {last_error}")
 
 
 async def extract_case(
