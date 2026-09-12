@@ -1011,6 +1011,16 @@ def validate_llm_proposal(
             reasons.append("Question text is a duplicate or near-duplicate of a previously asked question")
             break
 
+    # Check I: Internal concept identifiers never leak into user-facing text
+    leaked = _find_concept_leak(q_text)
+    if leaked:
+        reasons.append(f"Question text exposes an internal concept identifier: '{leaked}'")
+
+    # Check J: Question language script must match the patient's language
+    patient_lang = getattr(session_like, "language", "en") or "en"
+    if not _question_matches_language_script(q_text, patient_lang):
+        reasons.append(f"Question text is not written in the patient's language script (language='{patient_lang}')")
+
     if reasons:
         return ValidationResult(
             valid=False,
@@ -1048,6 +1058,38 @@ def _texts_are_substantially_identical(t1: str, t2: str) -> bool:
         if overlap > 0.85:
             return True
     return False
+
+
+# Phase 1.8: Guarantee the patient-facing question is natural and leak-free.
+GUJARATI_SCRIPT_RE = re.compile(r"[\u0A80-\u0AFF]")
+DEVANAGARI_SCRIPT_RE = re.compile(r"[\u0900-\u097F]")
+
+
+def _find_concept_leak(text: str) -> Optional[str]:
+    """Return the first internal concept identifier leaked into question text.
+
+    Matches the raw snake_case key (e.g. 'functional_limitation') or the
+    possessive clinical form ('your laterality', 'your functional limitation')
+    that a patient-facing question must never contain. Natural phrasing like
+    'does anything trigger it?' is untouched.
+    """
+    t = text.lower()
+    for key in ALL_ALLOWED_CONCEPTS:
+        display = key.replace("_", " ")
+        if "_" in key and key in t:
+            return key
+        if f"your {display}" in t:
+            return key
+    return None
+
+
+def _question_matches_language_script(text: str, language: str) -> bool:
+    """An English question served to a Gujarati/Hindi patient is garbled."""
+    if language == "gu":
+        return bool(GUJARATI_SCRIPT_RE.search(text))
+    if language == "hi":
+        return bool(DEVANAGARI_SCRIPT_RE.search(text))
+    return True
 
 
 # =========================================================================
