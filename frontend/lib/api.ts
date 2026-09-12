@@ -59,14 +59,15 @@ export async function checkBackendHealth(): Promise<HealthCheckResponse> {
 export async function startPatientSession(
   patient: Patient,
   language: string = "en",
-  visit_type: string = "new"
+  visit_type: string = "new",
+  adaptive: boolean = true
 ): Promise<StartSessionResponse> {
   const response = await fetch(`${API_BASE_URL}/session/start`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ patient, language, visit_type }),
+    body: JSON.stringify({ patient, language, visit_type, adaptive }),
   });
 
   return handleResponse<StartSessionResponse>(response, "Failed to start patient session");

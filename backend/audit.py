@@ -73,7 +73,7 @@ def test_normal_patient_flow():
             "age": 30,
             "gender": "Male"
         }
-        response = client.post("/session/start", json={"patient": patient_data, "language": "en", "visit_type": "new"})
+        response = client.post("/session/start", json={"patient": patient_data, "language": "en", "visit_type": "new", "adaptive": False})
         assert response.status_code == 200, f"Failed to start session: {response.text}"
         session_id = response.json()["session_id"]
         print(f"  Started session: {session_id}")
@@ -237,7 +237,7 @@ def test_safety_patient():
             "age": 45,
             "gender": "Female"
         }
-        response = client.post("/session/start", json={"patient": patient_data, "language": "en", "visit_type": "new"})
+        response = client.post("/session/start", json={"patient": patient_data, "language": "en", "visit_type": "new", "adaptive": False})
         assert response.status_code == 200, f"Failed to start session: {response.text}"
         session_id = response.json()["session_id"]
         print(f"  Started session: {session_id}")
@@ -399,7 +399,7 @@ def test_refresh_resume():
             "age": 25,
             "gender": "Male"
         }
-        response = client.post("/session/start", json={"patient": patient_data, "language": "en", "visit_type": "new"})
+        response = client.post("/session/start", json={"patient": patient_data, "language": "en", "visit_type": "new", "adaptive": False})
         assert response.status_code == 200, f"Failed to start session: {response.text}"
         session_id = response.json()["session_id"]
         

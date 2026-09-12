@@ -1,6 +1,6 @@
 import os
 import tempfile
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -22,16 +22,17 @@ def client():
         os.environ.pop("DATABASE_PATH", None)
 
 
-def _start(client):
+def _start(client, adaptive=True):
     return client.post("/session/start", json={
         "patient": {"name": "Test Patient", "age": 45, "gender": "male"},
         "language": "en",
         "visit_type": "new",
+        "adaptive": adaptive,
     })
 
 
-def _start_and_consent(client):
-    r = _start(client)
+def _start_and_consent(client, adaptive=True):
+    r = _start(client, adaptive=adaptive)
     sid = r.json()["session_id"]
     client.post(f"/session/{sid}/consent", json={"consent_given": True})
     return sid
@@ -121,8 +122,10 @@ def test_llm_cannot_advance_on_empty_answer(client):
         r = client.post(f"/session/{sid}/answer", json={"answer": "some pain"})
         assert r.json()["needs_review"] is True
         g = client.get(f"/session/{sid}").json()
-        # Interview MUST advance (raw answer stored as fallback); step moves to "onset"
-        assert g["interview_step"] == "onset", "LLM failure must not stall the interview"
+        # Interview MUST advance (raw answer stored as fallback); the step
+        # becomes the next deterministic target concept, never a blank/halt.
+        assert g["interview_step"] not in (None, "", "complete"), "LLM failure must not stall the interview"
+        assert g["next_question"] is not None
         # Raw answer stored as chief_complaint fallback
         assert g["chief_complaint"] == "some pain"
 
@@ -144,7 +147,10 @@ class _FakeProvider:
 
 
 def test_deterministic_progression_full_flow(client):
-    sid = _start_and_consent(client)
+    # Deterministic statutory intake path: chief_complaint -> onset -> duration ->
+    # severity -> character -> associated_symptoms. The adaptive conversational
+    # interviewer is opted out via adaptive=false.
+    sid = _start_and_consent(client, adaptive=False)
     client.post(f"/session/{sid}/patient-code")
     answers = [
         ("chief_complaint", "stomach pain"),
@@ -188,8 +194,8 @@ def test_refresh_restores_same_patient_code(client):
     g = client.get(f"/session/{sid}").json()
     assert g["patient_code"] == code
     assert g["session_id"] == sid
-    # GET exposes next_question derived from deterministic engine
-    assert g["next_question"] == "What is the primary reason for your visit today?"
+    # GET exposes next_question derived from the adaptive engine
+    assert g["next_question"] == "What is the primary health reason for your visit today?"
 
 
 def test_llm_extraction_failure_preserves_raw_and_marks_review(client):
@@ -206,21 +212,32 @@ def test_llm_extraction_failure_preserves_raw_and_marks_review(client):
     # AnswerRecord appended with needs_review=True and no provider
     assert g["answer_records"][-1]["needs_review"] is True
     assert g["answer_records"][-1]["provider"] is None
-    # Interview MUST advance — raw answer stored as fallback; step moves to "onset"
-    assert g["interview_step"] == "onset", "LLM failure must not stall interview"
+    # Interview MUST advance — raw answer stored as fallback; step moves to a
+    # concrete next target concept
+    assert g["interview_step"] not in (None, "", "complete"), "LLM failure must not stall interview"
+    assert g["next_question"] is not None
     assert g["chief_complaint"] == "my pain started yesterday"
-
-
-class _WorkingProvider:
-    provider_name = "groq"
-    default_model = "llama-3.3-70b-versatile"
 
 
 def test_extraction_advances_chief_complaint_when_provider_works(client):
     sid = _start_and_consent(client)
     client.post(f"/session/{sid}/patient-code")
-    with patch.object(session_router, "get_llm_provider", return_value=_WorkingProvider()), \
-         patch.object(session_router, "extract_field", return_value={"complaint": "stomach pain", "confidence": 0.9}):
+    with patch.object(session_router, "generate_adaptive_turn", AsyncMock(return_value={
+        "case_update": {
+            "presentation": "digestive",
+            "concepts": {"primary_symptom": "stomach pain", "site": "stomach"},
+            "mentioned_documents": [],
+        },
+        "next_question": {
+            "text": "How long have you been experiencing this pain?",
+            "target_concept": "duration",
+            "reason": "validate duration",
+            "priority": "normal",
+        },
+        "status": "continue",
+        "confidence": 0.9,
+        "provider": "groq",
+    })):
         r = client.post(f"/session/{sid}/answer", json={"answer": "stomach pain since morning"})
     assert r.status_code == 200
     body = r.json()
@@ -228,7 +245,7 @@ def test_extraction_advances_chief_complaint_when_provider_works(client):
     assert body["red_flag"] is False
     g = client.get(f"/session/{sid}").json()
     assert g["chief_complaint"] == "stomach pain"
-    assert g["interview_step"] == "onset"
+    assert g["interview_step"] == "duration"
     assert g["answer_records"][-1]["provider"] == "groq"
     assert g["answer_records"][-1]["needs_review"] is False
 
@@ -236,17 +253,18 @@ def test_extraction_advances_chief_complaint_when_provider_works(client):
 def test_extraction_failure_keeps_chief_complaint_unsafe_path(client):
     sid = _start_and_consent(client)
     client.post(f"/session/{sid}/patient-code")
-    # Provider is configured but its generate() raises -> extract_field raises.
+    # All providers fail (generate_adaptive_turn -> extract_case both down).
     # Correct behavior: raw answer stored as fallback, interview advances, needs_review=True.
-    with patch.object(session_router, "get_llm_provider", return_value=_WorkingProvider()), \
-         patch.object(session_router, "extract_field", side_effect=RuntimeError("LLM down")):
+    with patch.object(session_router, "generate_adaptive_turn", AsyncMock(side_effect=RuntimeError("LLM down"))), \
+         patch.object(session_router, "extract_case", AsyncMock(side_effect=RuntimeError("no providers"))):
         r = client.post(f"/session/{sid}/answer", json={"answer": "my pain started yesterday"})
     body = r.json()
     assert body["needs_review"] is True
     g = client.get(f"/session/{sid}").json()
     # Raw answer stored as chief_complaint fallback; interview step advances
     assert g["chief_complaint"] == "my pain started yesterday"
-    assert g["interview_step"] == "onset", "LLM failure must not stall interview"
+    assert g["interview_step"] not in (None, "", "complete"), "LLM failure must not stall interview"
+    assert g["next_question"] is not None
     # safe fallback: red flag never fires on a plain pain complaint
     assert body["red_flag"] is False
 

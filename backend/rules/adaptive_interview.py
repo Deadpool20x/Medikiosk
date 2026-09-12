@@ -67,11 +67,25 @@ ALL_ALLOWED_CONCEPTS = [
     "relevant_history",
 ]
 
+CORE_CLINICAL_CONCEPTS = [
+    "primary_symptom",
+    "chief_complaint",
+    "complaint",
+    "onset",
+    "duration",
+    "severity",
+    "character",
+    "associated_symptoms",
+    "aggravating_factors",
+    "relieving_factors",
+]
+
 # Prohibited clinical terms in patient-facing questions (diagnosis/treatment ban)
 PROHIBITED_QUESTION_PATTERNS = [
     # Diagnosis claims
-    r"\b(?:diagnos(?:ed|is)|you have|sounds like you have|suffering from)\s+(?:osteoarthritis|arthritis|sciatica|gerd|asthma|bronchitis|eczema|psoriasis|diabetes|hypertension)\b",
+    r"\b(?:diagnos(?:ed|is)|you have|sounds like you have|suffering from)\s+(?:(?:\w+)\s+)?(?:osteoarthritis|arthritis|sciatica|gerd|asthma|bronchitis|eczema|psoriasis|diabetes|hypertension)\b",
     r"\b(?:you are suffering from|your diagnosis is|it appears you have|nidan|dosha imbalance of)\b",
+    r"\b(?:diagnosed with|have been diagnosed with)\b",
     # Treatment / Prescription claims
     r"\b(?:you should take|take (?:medicine|tablet|capsule|syrup|paracetamol|ibuprofen|antibiotic|ashwagandha|triphala|guggulu))\b",
     r"\b(?:i prescribe|prescribing|prescription for you|take this dosage)\b",
@@ -201,7 +215,9 @@ DOMAIN_KNOWLEDGE_BASE: Dict[str, DomainKnowledge] = {
         triggers=[
             "stomach pain", "acidity", "gas", "bloating", "constipation", "diarrhea",
             "loose motion", "heartburn", "indigestion", "nausea", "loss of appetite",
-            "vomiting", "burping", "belching", "ajirna", "agnimandya", "amlapitta", "chardi"
+            "vomiting", "burping", "belching", "ajirna", "agnimandya", "amlapitta", "chardi",
+            "stomach", "burning in my stomach", "burning sensation in my stomach",
+            "irregular bowel", "bowel", "burning in the stomach"
         ],
         mandatory_concepts=["primary_symptom", "duration", "food_relationship"],
         relevant_concepts=[
@@ -532,8 +548,11 @@ def validate_llm_proposal(
     # Check B: Concept Relevance
     domain = current_domain or getattr(session_like, "presentation_domain", None) or DOMAIN_GENERAL
     knowledge = get_domain_knowledge(domain)
-    if q_concept and q_concept not in ALL_ALLOWED_CONCEPTS and q_concept not in knowledge.relevant_concepts:
-        reasons.append(f"Target concept '{q_concept}' is not in allowed concepts for domain {domain}")
+    if q_concept:
+        if q_concept not in ALL_ALLOWED_CONCEPTS:
+            reasons.append(f"Target concept '{q_concept}' is not recognized in allowed clinical concepts")
+        elif domain != DOMAIN_GENERAL and q_concept not in knowledge.relevant_concepts and q_concept not in CORE_CLINICAL_CONCEPTS:
+            reasons.append(f"Target concept '{q_concept}' is not clinically relevant for {domain} presentation")
 
     # Check C: Target concept already answered
     collected = getattr(session_like, "collected_concepts", {}) or {}

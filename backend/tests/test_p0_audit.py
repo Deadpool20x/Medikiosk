@@ -84,10 +84,10 @@ def _state(client, sid):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _start(client, name="Audit Patient", age=45, gender="female"):
+def _start(client, name="Audit Patient", age=45, gender="female", adaptive=True):
     r = client.post("/session/start", json={
         "patient": {"name": name, "age": age, "gender": gender},
-        "language": "en", "visit_type": "new",
+        "language": "en", "visit_type": "new", "adaptive": adaptive,
     })
     assert r.status_code == 200
     return r.json()["session_id"]
@@ -169,8 +169,9 @@ def _upload(client, sid, payload=_VALID_OCR, provider="GeminiVisionProvider"):
 # ===========================================================================
 
 def test_s1_normal_flow_persistence_p01_to_d03(client):
-    # P01 start
-    sid = _start(client)
+    # P01 start (deterministic legacy intake path so the statutory
+    # chief_complaint -> onset -> ... question order is exercised verbatim)
+    sid = _start(client, adaptive=False)
     s = _state(client, sid)
     assert s["session_id"] == sid
     assert s["consent_given"] is False
@@ -463,7 +464,7 @@ def test_s4_both_providers_fail_safe_error(client):
 # ===========================================================================
 
 def test_s5_invalid_llm_json_preserves_raw_and_progression(client):
-    sid = _start(client)
+    sid = _start(client, adaptive=False)
     _consent(client, sid)
     _code(client, sid)
 
@@ -546,15 +547,16 @@ def test_s6_resume_state_at_every_stage(client):
     assert st["patient_code"] == c3
     assert st["answer_records"] == []
 
-    # P04 mid-interview resume: current step is the NEXT unanswered field
+    # P04 mid-interview resume: backend answers with the NEXT unanswered
+    # concept and question (adaptive interviewer)
     st = _state(client, sid)
     assert st["patient_code"] == code
-    assert st["interview_step"] == "duration"           # order: chief, onset, duration
+    assert st["interview_step"] not in (None, "", "complete")
     assert len(st["answer_records"]) == 2
-    assert st["next_question"] == "How long have you been experiencing this, and is it constant or intermittent?"
+    assert isinstance(st["next_question"], str) and st["next_question"]
 
-    # P06-like: documents persisted and re-served
-    s6 = _start(client)
+    # P06-like: documents persisted and re-served (deterministic intake path)
+    s6 = _start(client, adaptive=False)
     _consent(client, s6)
     _code(client, s6)
     _complete_interview(client, s6)

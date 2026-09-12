@@ -234,8 +234,8 @@ class SessionResponse(BaseModel):
 async def start_session(payload: StartSessionRequest):
     session_id = str(uuid.uuid4())
     use_adaptive = True
-        if payload.adaptive is False:
-            use_adaptive = False
+    if payload.adaptive is False:
+        use_adaptive = False
 
     session = Session(
         session_id=session_id,
@@ -572,10 +572,11 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         mentioned = [str(d) for d in (case_up.get("mentioned_documents") or []) if d and str(d).strip()]
 
     # Heuristic free-text extraction for resilience
-    text_concepts = extract_concepts_from_text(payload.answer, domain=session.presentation_domain)
-    for hk, hv in text_concepts.items():
-        if _usable_concept_value(hv) and not _usable_concept_value(concepts.get(hk)):
-            concepts[hk] = hv
+        if llm_result is not None:
+            text_concepts = extract_concepts_from_text(payload.answer, domain=session.presentation_domain)
+            for hk, hv in text_concepts.items():
+                if _usable_concept_value(hv) and not _usable_concept_value(concepts.get(hk)):
+                    concepts[hk] = hv
 
     # Normalization
     if "complaint" in concepts and "primary_symptom" not in concepts:

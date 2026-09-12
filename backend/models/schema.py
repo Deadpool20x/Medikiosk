@@ -77,7 +77,7 @@ class Session(BaseModel):
     current_pending_question: Optional[str] = Field(default=None)
     adaptive_question_count: int = Field(default=0)
     mentioned_documents: List[str] = Field(default_factory=list)
-    adaptive: bool = Field(default=True)
+    adaptive: bool = Field(default=False)
 
 class HealthResponse(BaseModel):
     status: str = "ok"
