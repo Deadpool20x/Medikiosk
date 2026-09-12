@@ -550,9 +550,9 @@ def validate_llm_proposal(
     knowledge = get_domain_knowledge(domain)
     if q_concept:
         if q_concept not in ALL_ALLOWED_CONCEPTS:
-            reasons.append(f"Target concept '{q_concept}' is not recognized in allowed clinical concepts")
+            reasons.append(f"Target concept '{q_concept}' is not in allowed concepts")
         elif domain != DOMAIN_GENERAL and q_concept not in knowledge.relevant_concepts and q_concept not in CORE_CLINICAL_CONCEPTS:
-            reasons.append(f"Target concept '{q_concept}' is not clinically relevant for {domain} presentation")
+            reasons.append(f"Target concept '{q_concept}' is not in allowed concepts / not clinically relevant for {domain} presentation")
 
     # Check C: Target concept already answered
     collected = getattr(session_like, "collected_concepts", {}) or {}
@@ -672,8 +672,12 @@ def get_fallback_question(session_like: Any, target_concept: Optional[str] = Non
     # Determine concept to ask
     chosen_concept = target_concept
     if not chosen_concept or chosen_concept in asked_concepts or (chosen_concept in collected and collected[chosen_concept]):
-        # Find first missing mandatory concept
-        for mc in knowledge.mandatory_concepts:
+        # Find first missing mandatory concept in priority order
+        profile = get_presentation_profile(domain)
+        priority_map = {qp.concept_key: qp.priority for qp in profile.question_sequence}
+        # Sort mandatory concepts by priority (lower priority first)
+        sorted_mandatory = sorted(knowledge.mandatory_concepts, key=lambda c: priority_map.get(c, 999))
+        for mc in sorted_mandatory:
             if mc not in asked_concepts and (mc not in collected or not str(collected[mc]).strip()):
                 chosen_concept = mc
                 break
