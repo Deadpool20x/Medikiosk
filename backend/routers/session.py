@@ -8,6 +8,9 @@ from datetime import datetime, timezone
 from backend.models.schema import Session, Patient, DoctorReview, DocumentField, HistoryOfPresentIllness, AnswerRecord
 from backend.db import get_session as db_get_session, save_session as db_save_session, init_db, next_queue_token, next_patient_code
 import os
+import logging
+
+logger = logging.getLogger("medikiosk.session")
 from backend.rules.adaptive_interview import (
     ALL_DOMAINS,
     MAX_ADAPTIVE_QUESTIONS,
@@ -602,7 +605,8 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         llm_result = await generate_adaptive_turn(context)
         provider_used = llm_result.get("provider")
         confidence = llm_result.get("confidence", 0.85)
-    except Exception:
+    except Exception as e:
+        logger.error("generate_adaptive_turn failed: %s", e, exc_info=True)
         # Fallback to extract_case if mocked in legacy tests
         try:
             legacy_case = await extract_case(payload.answer, current_concept, session.presentation_domain)
@@ -620,7 +624,8 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
             }
             provider_used = legacy_case.get("provider")
             confidence = legacy_case.get("confidence", 0.8)
-        except Exception:
+        except Exception as e2:
+            logger.error("extract_case fallback also failed: %s", e2, exc_info=True)
             needs_review = True
 
     # Structured case-state concepts & domain update
@@ -735,7 +740,8 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
                         needs_review = True
                 else:
                     needs_review = True
-            except Exception:
+            except Exception as e3:
+                logger.error("correct_adaptive_turn failed: %s", e3, exc_info=True)
                 needs_review = True
 
     # Stage 8: Sufficiency evaluation or human fallback

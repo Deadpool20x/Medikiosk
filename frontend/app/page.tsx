@@ -8,7 +8,6 @@ const LANGUAGE_KEY = "medikiosk_preferred_language";
 export default function HomePage() {
   const router = useRouter();
   const [selectedLanguage, setSelectedLanguage] = useState("en");
-  const [patientStatus, setPatientStatus] = useState<"new" | "returning">("new");
 
   const languages = [
     { code: "en", label: "English" },
@@ -132,17 +131,13 @@ export default function HomePage() {
               <span className="mk-p01-section__hint">First time OPD visit</span>
             </div>
             <div className="mk-p01-status-grid">
-              <button
-                type="button"
-                className="mk-p01-status-card mk-p01-status-card--active"
-                onClick={() => setPatientStatus("new")}
-              >
+              <div className="mk-p01-status-card mk-p01-status-card--active">
                 <span className="mk-p01-status-card__dot" />
                 <div>
                   <span className="mk-p01-status-card__label">New Patient</span>
                   <span className="mk-p01-status-card__sub">First visit</span>
                 </div>
-              </button>
+              </div>
             </div>
           </div>
 

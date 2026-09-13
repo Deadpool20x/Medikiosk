@@ -40,6 +40,28 @@ def _is_placeholder(value: str) -> bool:
     return False
 
 
+def _clean_json_text(raw: str) -> str:
+    if not raw:
+        return ""
+    text = re.sub(r"<think>.*?</think>", "", raw, flags=re.DOTALL).strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.MULTILINE).strip()
+    text = re.sub(r"\s*```$", "", text, flags=re.MULTILINE).strip()
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if match:
+        text = match.group(0).strip()
+    return text
+
+
+def _parse_llm_json(raw: str) -> Dict[str, Any]:
+    cleaned = _clean_json_text(raw)
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        # Strip trailing commas before closing braces/brackets
+        sanitized = re.sub(r",\s*([\}\]])", r"\1", cleaned)
+        return json.loads(sanitized)
+
+
 class OpenAICompatibleProvider(LLMProvider):
     """Base for any OpenAI Chat-Completions-compatible endpoint."""
     default_model: str = ""
@@ -94,7 +116,10 @@ class OpenAICompatibleProvider(LLMProvider):
         if not choices:
             return None
         msg = choices[0].get("message") or {}
-        return msg.get("content")
+        content = msg.get("content")
+        if not content and msg.get("reasoning"):
+            content = msg.get("reasoning")
+        return content
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
         if not self.is_configured():
@@ -273,8 +298,7 @@ async def extract_with_fallback(field: str, patient_answer: str) -> Dict[str, An
             response = await provider.generate(patient_answer, system_prompt=system_prompt)
             if not response:
                 raise RuntimeError("Empty response from LLM provider")
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
-            data = json.loads(cleaned)
+            data = _parse_llm_json(response)
             if not isinstance(data, dict) or set(data.keys()) != set(allowed_keys):
                 raise ValueError(
                     f"LLM returned fields outside the allowed schema for {field}"
@@ -432,8 +456,7 @@ async def generate_adaptive_turn(
             response = await provider.generate(user_prompt, system_prompt=system_prompt)
             if not response:
                 raise RuntimeError("Empty response from LLM provider")
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
-            data = json.loads(cleaned)
+            data = _parse_llm_json(response)
             parsed = AdaptiveTurnProposal.model_validate(data)
 
             # Sanitize concepts
@@ -451,6 +474,8 @@ async def generate_adaptive_turn(
                 "provider": provider.provider_name,
             }
         except Exception as e:
+            err_msg = str(e) if str(e).strip() else repr(e)
+            logger.warning("Provider %s failed during adaptive turn: %s", provider.provider_name, err_msg)
             last_error = e
             continue
 
@@ -524,8 +549,7 @@ async def correct_adaptive_turn(
             response = await provider.generate(user_prompt, system_prompt=system_prompt)
             if not response:
                 raise RuntimeError("Empty response from LLM provider")
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
-            data = json.loads(cleaned)
+            data = _parse_llm_json(response)
             parsed = AdaptiveTurnProposal.model_validate(data)
 
             sanitized_concepts = {}
@@ -543,6 +567,8 @@ async def correct_adaptive_turn(
                 "corrected": True,
             }
         except Exception as e:
+            err_msg = str(e) if str(e).strip() else repr(e)
+            logger.warning("Provider %s failed during correction: %s", provider.provider_name, err_msg)
             last_error = e
             continue
 
@@ -592,8 +618,7 @@ async def extract_case(
             response = await provider.generate(patient_answer, system_prompt=system_prompt)
             if not response:
                 raise RuntimeError("Empty response from LLM provider")
-            cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
-            data = json.loads(cleaned)
+            data = _parse_llm_json(response)
             parsed = CaseExtraction.model_validate(data)
             if parsed.domain and parsed.domain not in allowed_domains:
                 raise ValueError(f"LLM returned unknown domain: {parsed.domain}")
@@ -611,6 +636,8 @@ async def extract_case(
                 "provider": provider.provider_name,
             }
         except Exception as e:
+            err_msg = str(e) if str(e).strip() else repr(e)
+            logger.warning("Provider %s failed during extract_case: %s", provider.provider_name, err_msg)
             last_error = e
             continue
     raise RuntimeError(f"All LLM providers failed: {last_error}")
@@ -633,8 +660,7 @@ async def extract_field(provider: LLMProvider, field: str, patient_answer: str) 
     response = await provider.generate(patient_answer, system_prompt=system_prompt)
     if not response:
         raise RuntimeError("Empty response from LLM provider")
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", response.strip())
-    data = json.loads(cleaned)
+    data = _parse_llm_json(response)
     if not isinstance(data, dict) or set(data.keys()) != set(allowed_keys):
         raise ValueError(f"LLM returned fields outside the allowed schema for {field}")
     if "confidence" not in data:
