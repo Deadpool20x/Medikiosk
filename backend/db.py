@@ -292,11 +292,33 @@ def next_queue_token(prefix: str, db_path: Optional[str] = None) -> str:
     max_num = 0
     for r in rows:
         try:
-            num = int(r["queue_token"].split("-", 1)[1])
+            num = int(r["queue_token"].rsplit("-", 1)[1])
             max_num = max(max_num, num)
         except (ValueError, IndexError):
             continue
     return f"{prefix}-{max_num + 1:03d}"
+
+def next_patient_code(prefix: str, db_path: Optional[str] = None) -> str:
+    """Return the next sequential structured patient code for a facility/date prefix.
+
+    Format: AIIA-YYYYMM-NNNNN (e.g. AIIA-202609-00001).
+    """
+    conn = get_db_connection(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT patient_code FROM sessions WHERE patient_code LIKE ?",
+            (f"{prefix}-%",),
+        ).fetchall()
+    finally:
+        conn.close()
+    max_num = 0
+    for r in rows:
+        try:
+            num = int(r["patient_code"].rsplit("-", 1)[1])
+            max_num = max(max_num, num)
+        except (ValueError, IndexError, AttributeError):
+            continue
+    return f"{prefix}-{max_num + 1:05d}"
 
 def list_queued_sessions(department: Optional[str] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """Return sessions that hold a department queue token for the D01 view.

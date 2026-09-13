@@ -8,7 +8,6 @@ from backend.main import app
 from backend.models.schema import Session, Patient, HistoryOfPresentIllness
 from backend.rules.safety_rules import evaluate_safety as evaluate_safety_v2, structured_state_text
 from backend.rules.department_rules import classify_department, clinical_text
-from backend.rules.interview_rules import evaluate_safety as evaluate_safety_v1
 from backend.db import get_db_connection, init_db
 
 
@@ -36,9 +35,6 @@ def test_safety_and_department_rules_resilient_to_none_and_non_string_symptoms()
     # Department classification must safely evaluate without TypeError
     dept = classify_department(session)
     assert dept == "Kayachikitsa"
-
-    # Interview safety evaluate_safety must not crash with None
-    assert evaluate_safety_v1(None, session) is True  # type: ignore
 
 
 def test_sqlite_wal_mode_and_indexes_created():

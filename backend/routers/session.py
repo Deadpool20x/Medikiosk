@@ -6,7 +6,7 @@ import uuid
 import secrets
 from datetime import datetime, timezone
 from backend.models.schema import Session, Patient, DoctorReview, DocumentField, HistoryOfPresentIllness, AnswerRecord
-from backend.db import get_session as db_get_session, save_session as db_save_session, init_db, next_queue_token
+from backend.db import get_session as db_get_session, save_session as db_save_session, init_db, next_queue_token, next_patient_code
 import os
 from backend.rules.adaptive_interview import (
     ALL_DOMAINS,
@@ -170,6 +170,12 @@ class PatientCodeResponse(BaseModel):
 class AnswerRequest(BaseModel):
     answer: str = Field(..., max_length=5000)
 
+INTERVIEW_COMPLETION_MESSAGES: Dict[str, str] = {
+    "en": "Your details have been saved. If you have any physical medical documents or reports with you, please show them to the doctor as well.",
+    "hi": "आपकी जानकारी दर्ज कर ली गई है। यदि आपके पास कोई पुरानी पर्ची, रिपोर्ट या मेडिकल दस्तावेज़ हैं, तो कृपया डॉक्टर को ज़रूर दिखाएं।",
+    "gu": "તમારી વિગતો નોંધાઈ ગઈ છે. જો તમારી પાસે કોઈ જૂના રિપોર્ટ કે તબીબી દસ્તાવેજો હોય, તો કૃપા કરીને ડૉક્ટરને પણ બતાવો.",
+}
+
 class AnswerResponse(BaseModel):
     next_question: Optional[str]
     session_complete: bool
@@ -181,6 +187,15 @@ class AnswerResponse(BaseModel):
     adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
     mentioned_documents: List[str] = Field(default_factory=list)
     denied_concepts: List[str] = Field(default_factory=list)
+    completion_message: Optional[str] = None
+
+class EmergencyAlertResponse(BaseModel):
+    status: str = "emergency_alerted"
+    safety_flagged: bool = True
+    redirect_screen: str = "P05_EMERGENCY"
+    message: str = "Staff has been alerted. Please stay where you are. Hospital personnel are on their way."
+    patient_code: Optional[str] = None
+    session_id: str
 
 class UploadResponse(BaseModel):
     extracted_value: Optional[str] = None
@@ -292,6 +307,11 @@ async def submit_consent(session_id: str, payload: ConsentRequest):
     db_save_session(session)
     return ConsentResponse(status="success", detail="Consent recorded")
 
+def _generate_patient_code(db_path=None) -> str:
+    now = datetime.now(timezone.utc)
+    prefix = f"AIIA-{now.strftime('%Y%m')}"
+    return next_patient_code(prefix, db_path=db_path)
+
 @router.post("/{session_id}/patient-code", response_model=PatientCodeResponse)
 async def get_patient_code(session_id: str):
     session = db_get_session(session_id)
@@ -308,11 +328,32 @@ async def get_patient_code(session_id: str):
         # Return existing code (generated once, persisted)
         return PatientCodeResponse(patient_code=session.patient_code)
 
-    # Generate patient code: format MK-{8 chars}
-    code = f"MK-{secrets.token_hex(4).upper()}"
+    # Generate patient code: format AIIA-YYYYMM-NNNNN
+    code = _generate_patient_code()
     session.patient_code = code
     db_save_session(session)
     return PatientCodeResponse(patient_code=code)
+
+@router.post("/{session_id}/emergency", response_model=EmergencyAlertResponse)
+async def trigger_emergency_help(session_id: str):
+    session = db_get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.safety_flagged = True
+    session.safety_flag_time = datetime.now(timezone.utc)
+    if not session.safety_detail:
+        session.safety_detail = ["Patient requested emergency assistance at kiosk"]
+    else:
+        session.safety_detail.append("Patient requested emergency assistance at kiosk")
+
+    db_save_session(session)
+    return EmergencyAlertResponse(
+        status="emergency_alerted",
+        message="Staff has been alerted. Please stay where you are. Hospital personnel are on their way.",
+        patient_code=session.patient_code,
+        session_id=session.session_id,
+    )
 
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session(session_id: str):
@@ -389,7 +430,8 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         return AnswerResponse(next_question=None, session_complete=session.interview_complete, red_flag=True, interview_status="safety_flagged")
 
     if session.interview_complete:
-        return AnswerResponse(next_question=None, session_complete=True, interview_status="complete")
+        completion_msg = INTERVIEW_COMPLETION_MESSAGES.get(session.language, INTERVIEW_COMPLETION_MESSAGES["en"])
+        return AnswerResponse(next_question=None, session_complete=True, interview_status="complete", completion_message=completion_msg)
 
     current_field = session.interview_step
 
@@ -517,12 +559,14 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
 
         db_save_session(session)
         next_question = get_next_question(session) if not session.interview_complete else None
+        completion_msg = INTERVIEW_COMPLETION_MESSAGES.get(session.language, INTERVIEW_COMPLETION_MESSAGES["en"]) if session.interview_complete else None
         return AnswerResponse(
             next_question=next_question,
             session_complete=session.interview_complete,
             red_flag=False,
             needs_review=needs_review,
             interview_status="complete" if session.interview_complete else "in_progress",
+            completion_message=completion_msg,
         )
 
     # ── Adaptive Conversational Interviewer Execution Path ─────────────────
@@ -732,6 +776,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     db_save_session(session)
 
     # Stage 10: Return question response
+    completion_msg = INTERVIEW_COMPLETION_MESSAGES.get(session.language, INTERVIEW_COMPLETION_MESSAGES["en"]) if session.interview_complete else None
     return AnswerResponse(
         next_question=new_question_text,
         session_complete=session.interview_complete,
@@ -742,6 +787,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         questions_asked=session.adaptive_question_count,
         adaptive_question_limit=MAX_ADAPTIVE_QUESTIONS,
         mentioned_documents=session.mentioned_documents,
+        completion_message=completion_msg,
     )
 
 @router.post("/{session_id}/upload", response_model=UploadResponse)

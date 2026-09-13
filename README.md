@@ -9,7 +9,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Next.js-16.1+-000000.svg?logo=next.js&logoColor=white)](https://nextjs.org)
 [![Python](https://img.shields.io/badge/Python-3.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)](https://python.org)
-[![Tests](https://img.shields.io/badge/Tests-164%20passed-success.svg)](backend/tests)
+[![Tests](https://img.shields.io/badge/Tests-238%20passed-success.svg)](backend/tests)
 [![Audit](https://img.shields.io/badge/Clinical%20Audit-9%2F9%20passed-success.svg)](backend/audit.py)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
@@ -48,11 +48,12 @@ An intelligent, multilingual clinical intake and OPD queue triage kiosk engineer
 Public hospital outpatient departments (OPDs) face staggering patient congestion, multi-hour counter delays, and fragmented medical records. Crucially, critical red-flag emergencies often sit unrecognized in general queues.
 
 **MediKiosk** resolves these bottlenecks at the point of arrival:
-1. **Multilingual Patient Self-Service**: Guides patients through touch-based intake in English, Hindi, Marathi, or Gujarati.
-2. **Adaptive Clinical Interview**: Collects chief complaints and history of present illness (onset, duration, severity, character) using conversational LLM extraction.
-3. **Deterministic Safety Gate**: Screens all patient submissions against emergency red-flag conditions with immediate triage diversion—independent of LLM inference.
-4. **Vision Prescription OCR**: Digitizes handwritten and printed past prescriptions, extracting structured medications, strengths, and dosages.
-5. **Doctor Workspace**: Provides real-time, department-routed OPD queues (Kayachikitsa, Panchakarma), structured summaries, and complete physician editing agency.
+1. **Multilingual Patient Self-Service**: Guides patients through touch-based intake in English, Hindi, Marathi, or Gujarati with structured language fallbacks.
+2. **Sequential Hospital Patient Code**: Generates standard `AIIA-YYYYMM-NNNNN` tracking codes (e.g. `AIIA-202609-00001`) with persistent atomic sequence counters.
+3. **Adaptive Clinical Interview & Document Advisory**: Collects chief complaints and history of present illness (onset, duration, severity, character), alerting patients to scan past prescriptions or lab records.
+4. **Dual Emergency Front Door & Safety Gate**: An always-visible `🚨 Need Help Now` button plus deterministic red-flag keyword screening divert emergencies to triage immediately—independent of LLM inference.
+5. **Vision Prescription OCR**: Digitizes handwritten and printed past prescriptions, extracting structured medications, strengths, and dosages.
+6. **Doctor Workspace**: Provides real-time, department-routed OPD queues (Kayachikitsa, Panchakarma), structured summaries, and complete physician editing agency.
 
 ---
 
@@ -62,9 +63,10 @@ Public hospital outpatient departments (OPDs) face staggering patient congestion
 flowchart TD
     subgraph Frontend ["Patient Kiosk & Doctor Workspace (Next.js 16 / React 19)"]
         P01["P01: Language Selection"] --> P02["P02: Patient Consent"]
-        P02 --> P03["P03: Session Code"]
+        P02 --> P03["P03: Session Code (AIIA-YYYYMM-NNNNN)"]
         P03 --> P04["P04: Clinical Interview"]
-        P04 -->|Red-Flag Trigger| P05["P05: Emergency Lockout"]
+        P01 -->|Need Help Now| P05["P05: Emergency Alert"]
+        P04 -->|Red-Flag Trigger| P05
         P04 -->|Normal Intake| P06["P06: Prescription OCR"]
         P06 --> P07["P07: Structured Summary"]
         P07 --> P08["P08: Queue Token Issued"]
@@ -107,7 +109,7 @@ flowchart TD
 - **Database**: SQLite with Write-Ahead Logging (`PRAGMA journal_mode = WAL;`), 30-second busy timeout locks, and compound query indexes.
 - **Multi-Provider AI Fallback**:
   - **Conversational Extraction**: Groq (`openai/gpt-oss-20b`), NVIDIA NIM, OpenRouter.
-  - **Prescription Vision OCR**: Google Gemini Vision (`gemini-2.5-flash`), Groq Vision (`qwen/qwen3.6-27b`).
+  - **Prescription Vision OCR**: Google Gemini Vision (`gemini-2.5-flash`, env-configurable via `GEMINI_VISION_MODEL`), Groq Vision (`llama-3.2-11b-vision-preview`).
 
 ---
 
@@ -214,6 +216,7 @@ Open Kiosk: [http://localhost:3000](http://localhost:3000) • Doctor Workspace:
 | `GROQ_API_KEY` | *(Required for LLM)* | Groq Cloud API key for interview extraction |
 | `GROQ_MODEL` | `openai/gpt-oss-20b` | Model ID used for conversational extraction |
 | `GEMINI_API_KEY` | *(Optional)* | Google Gemini API key for prescription OCR |
+| `GEMINI_VISION_MODEL` | `gemini-2.5-flash` | Configurable Google Gemini Vision model ID |
 | `NVIDIA_NIM_API_KEY` | *(Optional)* | NVIDIA NIM vision fallback key |
 | `BACKEND_PORT` | `8000` | FastAPI server listening port |
 | `DATABASE_URL` | `sqlite:///./backend/data/medikiosk.db` | SQLite database connection string |
@@ -228,7 +231,10 @@ Open Kiosk: [http://localhost:3000](http://localhost:3000) • Doctor Workspace:
 
 | Method | Endpoint | Description | Invariant Enforcement |
 | :--- | :--- | :--- | :--- |
-| `POST` | `/session/start` | Initialize new patient intake session | Generates UUID & 6-char `patient_code` |
+| `POST` | `/session/start` | Initialize new patient intake session | Generates UUID & tracking session |
+| `POST` | `/session/{id}/consent` | Record patient intake consent | Prerequisite for patient code generation |
+| `POST` | `/session/{id}/patient-code`| Issue sequential hospital code | `AIIA-YYYYMM-NNNNN` format with atomic prefix counter |
+| `POST` | `/session/{id}/emergency`| Direct emergency assistance trigger | Immediate lockout to P05; routes case to triage |
 | `GET` | `/session/{id}` | Retrieve current session state | Returns 404 for invalid ID |
 | `POST` | `/session/{id}/answer` | Submit clinical interview response | Evaluates deterministic safety rules |
 | `POST` | `/session/{id}/upload` | Upload previous prescription image | Rejects >8MB, invalid magic bytes, or corrupt files |
@@ -252,11 +258,14 @@ Open Kiosk: [http://localhost:3000](http://localhost:3000) • Doctor Workspace:
 MediKiosk is verified against comprehensive automated testing suites:
 
 ```bash
-# Run backend pytest suite (164 tests)
+# Run backend pytest suite (238 tests)
 pytest backend/tests -v
 
 # Run 9-point clinical invariant audit
-python -m backend.audit
+python backend/audit.py
+
+# Run real multi-role end-to-end simulation
+python scripts/simulate_roles_e2e.py
 
 # Verify frontend TypeScript types
 npx --prefix frontend tsc --noEmit

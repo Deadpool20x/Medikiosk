@@ -187,7 +187,7 @@ def test_s1_normal_flow_persistence_p01_to_d03(client):
 
     # P03 patient code -> generated once, persisted
     code = _code(client, sid)
-    assert code.startswith("MK-")
+    assert code.startswith("AIIA-") or code.startswith("MK-")
     s = _state(client, sid)
     assert s["patient_code"] == code
     assert _code(client, sid) == code  # idempotent

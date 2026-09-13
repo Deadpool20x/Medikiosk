@@ -193,6 +193,10 @@ test.png
 test-artifacts/
 stitch_medikiosk_FINAL/p0_shots/
 stitch_medikiosk_FINAL/p0_fix_shots/
+live_validation_results.json
+scratch_audit_transcripts.json
+*.jsonl
+scratch/
 
 # Project Specific
 frontend/out/

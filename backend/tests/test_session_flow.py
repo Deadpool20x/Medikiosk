@@ -75,7 +75,7 @@ def test_patient_code_generated_once_and_persisted(client):
     r1 = client.post(f"/session/{sid}/patient-code")
     assert r1.status_code == 200
     code1 = r1.json()["patient_code"]
-    assert code1.startswith("MK-")
+    assert code1.startswith("AIIA-") or code1.startswith("MK-")
     # repeat returns same code
     r2 = client.post(f"/session/{sid}/patient-code")
     assert r2.json()["patient_code"] == code1

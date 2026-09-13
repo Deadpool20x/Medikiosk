@@ -173,3 +173,20 @@ def test_red_flag_from_structured_state(client):
     db_save(s)
     r2 = client.post(f"/session/{sid}/answer", json={"answer": "nothing to add"})
     assert r2.json()["red_flag"] is True
+
+
+def test_direct_emergency_endpoint_flags_and_alerts(client):
+    sid = _start_and_code(client)
+    res = client.post(f"/session/{sid}/emergency")
+    assert res.status_code == 200
+    data = res.json()
+    assert data["status"] == "emergency_alerted"
+    assert "Staff has been alerted" in data["message"]
+
+    sess = client.get(f"/session/{sid}").json()
+    assert sess["safety_flagged"] is True
+    assert any("emergency" in str(d).lower() for d in sess["safety_detail"])
+
+    em = client.get("/doctor/emergency").json()
+    assert sid in [e["session_id"] for e in em]
+

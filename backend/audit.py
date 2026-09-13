@@ -87,7 +87,7 @@ def test_normal_patient_flow():
         response = client.post(f"/session/{session_id}/patient-code")
         assert response.status_code == 200, f"Failed to get patient code: {response.text}"
         patient_code = response.json()["patient_code"]
-        assert patient_code.startswith("MK-"), f"Unexpected patient code format: {patient_code}"
+        assert patient_code.startswith("AIIA-"), f"Unexpected patient code format: {patient_code}"
         print(f"  Patient code: {patient_code}")
         
         # P04: Interview - we'll go through the required fields

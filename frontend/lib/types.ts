@@ -103,6 +103,7 @@ export interface AnswerResponse {
   session_complete: boolean;
   red_flag: boolean;
   needs_review: boolean;
+  completion_message?: string | null;
 }
 
 export interface UploadResponse {

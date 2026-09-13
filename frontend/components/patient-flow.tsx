@@ -10,6 +10,7 @@ import {
   submitAnswer,
   getSession,
   completeDocumentIntake,
+  triggerEmergency,
 } from "../lib/api";
 import type { Patient, Session as SessionType } from "../lib/types";
 import { DocumentUpload } from "./document-upload";
@@ -26,6 +27,33 @@ function MediKioskLogo() {
   );
 }
 
+function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onHelp}
+      className="mk-emergency-btn"
+      aria-label="Request immediate emergency medical assistance"
+      style={{
+        backgroundColor: "#DC2626",
+        color: "#FFFFFF",
+        fontWeight: 700,
+        padding: "8px 14px",
+        borderRadius: "8px",
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "6px",
+        fontSize: "13px",
+        cursor: "pointer",
+        border: "1px solid #B91C1C",
+        boxShadow: "0 2px 4px rgba(220, 38, 38, 0.25)",
+      }}
+    >
+      <span style={{ fontSize: "15px" }} aria-hidden="true">🚨</span> Need Help Now
+    </button>
+  );
+}
+
 type Screen = "welcome" | "consent" | "code" | "interview" | "documents" | "summary" | "safety" | "waiting";
 
 export function PatientFlow() {
@@ -33,6 +61,7 @@ export function PatientFlow() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [session, setSession] = useState<SessionType | null>(null);
   const [reactQuestion, setReactQuestion] = useState<string | null>(null);
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [patientCode, setPatientCode] = useState<string | null>(null);
@@ -243,6 +272,9 @@ export function PatientFlow() {
         return;
       }
       if (res.session_complete) {
+        if (res.completion_message) {
+          setCompletionMessage(res.completion_message);
+        }
         setScreen("documents");
         return;
       }
@@ -256,12 +288,20 @@ export function PatientFlow() {
     }
   }
 
-
-  function handleReturningPatient() {
-    // Phase 1: Returning Patient CTA is visual-only (flow not built).
-    // Leave on welcome screen; new/returning selection is applied via visit_type.
-    setVisitType("returning");
+  async function handleEmergencyAlert() {
+    try {
+      if (sessionId) {
+        await triggerEmergency(sessionId);
+      }
+    } catch {
+      // Prioritize client safety view transition
+    }
+    setRedFlag(true);
+    setScreen("safety");
   }
+
+
+
 
   function handleSafetyReset() {
     window.sessionStorage.removeItem(SESSION_KEY);
@@ -362,7 +402,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p02-header__spacer" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
         <main className="mk-p02-main">
@@ -453,7 +493,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p03-header__spacer" aria-hidden="true" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
 
@@ -586,7 +626,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p04-header__spacer" aria-hidden="true" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
 
@@ -758,11 +798,33 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p06-header__spacer" aria-hidden="true" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
 
         <main className="mk-p06-main">
+          {completionMessage && (
+            <div
+              className="mk-completion-banner"
+              style={{
+                background: "var(--mk-surface, #F8FAFC)",
+                border: "1px solid var(--mk-border, #E2E8F0)",
+                borderLeft: "4px solid var(--mk-primary, #0D9488)",
+                borderRadius: "8px",
+                padding: "12px 16px",
+                marginBottom: "20px",
+                fontSize: "14px",
+                lineHeight: "1.5",
+                color: "var(--mk-text, #1E293B)",
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+              }}
+            >
+              <span style={{ fontSize: "18px" }} aria-hidden="true">📋</span>
+              <span>{completionMessage}</span>
+            </div>
+          )}
           <DocumentUpload
             sessionId={sessionId}
             onContinue={handleDocumentsDone}
@@ -1037,7 +1099,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p07-header__spacer" aria-hidden="true" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
 
@@ -1063,9 +1125,12 @@ export function PatientFlow() {
 
   return (
     <div className="mk-patient-shell">
-      <div className="mk-patient-header">
-        <MediKioskLogo />
-        <span className="mk-patient-header__wordmark">MediKiosk</span>
+      <div className="mk-patient-header" style={{ width: "100%", maxWidth: "680px", display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          <MediKioskLogo />
+          <span className="mk-patient-header__wordmark">MediKiosk</span>
+        </div>
+        <EmergencyHelpButton onHelp={handleEmergencyAlert} />
       </div>
       <div className="mk-patient-card">
         {error && (
@@ -1082,14 +1147,18 @@ export function PatientFlow() {
             <div className="mk-form-group">
               <label className="mk-field-label">Language</label>
               <div className="mk-chip-group">
-                {["en", "hi"].map((l) => (
+                {[
+                  { code: "en", label: "English" },
+                  { code: "hi", label: "हिन्दी" },
+                  { code: "gu", label: "ગુજરાતી" },
+                ].map((l) => (
                   <button
-                    key={l}
+                    key={l.code}
                     type="button"
-                    className={`mk-chip ${language === l ? "selected" : ""}`}
-                    onClick={() => setLanguage(l)}
+                    className={`mk-chip ${language === l.code ? "selected" : ""}`}
+                    onClick={() => setLanguage(l.code)}
                   >
-                    {l === "en" ? "English" : "हिन्दी"}
+                    {l.label}
                   </button>
                 ))}
               </div>
@@ -1100,17 +1169,10 @@ export function PatientFlow() {
               <div className="mk-chip-group">
                 <button
                   type="button"
-                  className={`mk-chip ${visitType === "new" ? "selected" : ""}`}
+                  className="mk-chip selected"
                   onClick={() => setVisitType("new")}
                 >
                   New Patient
-                </button>
-                <button
-                  type="button"
-                  className={`mk-chip ${visitType === "returning" ? "selected" : ""}`}
-                  onClick={handleReturningPatient}
-                >
-                  Returning Patient
                 </button>
               </div>
             </div>

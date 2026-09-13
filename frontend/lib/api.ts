@@ -108,6 +108,17 @@ export async function submitAnswer(sessionId: string, answer: string): Promise<A
   return handleResponse<AnswerResponse>(response, "Failed to submit interview answer");
 }
 
+export async function triggerEmergency(sessionId: string): Promise<{ status: string; message: string }> {
+  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/emergency`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+  });
+
+  return handleResponse<{ status: string; message: string }>(response, "Failed to trigger emergency alert");
+}
+
 export async function getEmergencySessions(): Promise<EmergencyItem[]> {
   const response = await fetch(`${API_BASE_URL}/doctor/emergency`, {
     method: "GET",

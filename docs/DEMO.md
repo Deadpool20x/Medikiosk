@@ -46,18 +46,20 @@ This seeds:
 7. **P08 Token**: Receive official queue token (e.g., `KY-014`).
 8. **P09 Waiting Room**: View real-time estimated waiting time and queue status.
 
-### Scenario B: Emergency Red-Flag Escalation
-1. Start intake as a new patient.
-2. In **P04 Clinical Interview**, enter:
-   - *"I have severe chest pain radiating to my left arm and difficulty breathing."*
+### Scenario B: Emergency Escalation (Direct Button & Conversational Backstop)
+1. **Direct Emergency Front Door**:
+   - At any point in the patient flow (Welcome, Consent, Code, Interview, Records, Summary), click the prominent **"🚨 Need Help Now"** button in the header.
+   - The kiosk immediately bypasses the questionnaire and transitions to **P05 Emergency Alert**.
+2. **Conversational Red-Flag Backstop**:
+   - Alternatively, during the **P04 Clinical Interview**, enter acute red-flag symptoms (e.g., *"I have severe chest pain radiating to my left arm and difficulty breathing."*).
+   - Conversational red-flag detection triggers an immediate lockdown and routes to **P05 Emergency Alert**.
 3. **P05 Emergency Alert**:
-   - The kiosk immediately locks down the normal intake path.
-   - Screen turns high-contrast emergency red with flashing medical instructions.
-   - Directs patient to Emergency Room Bay 1 immediately.
+   - The screen locks down the normal intake path and renders high-contrast emergency guidance.
+   - Directs the patient to Emergency Room Bay 1 immediately.
    - No queue token is issued.
-4. **D04 Verification**:
+4. **D04 Emergency Dashboard**:
    - Open [http://localhost:3000/doctor/emergency](http://localhost:3000/doctor/emergency).
-   - Verify the patient appears instantly with the red-flag symptom highlighted.
+   - Verify the patient case appears instantly in the triage monitor with critical emergency priority.
 
 ### Scenario C: Physician Consultation Review
 1. Open [http://localhost:3000/doctor](http://localhost:3000/doctor).

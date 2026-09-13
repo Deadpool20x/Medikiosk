@@ -18,6 +18,12 @@ DEFAULT_DEPARTMENT = KAYACHIKITSA
 # (keyword, department) — first match wins. Red flags never reach here.
 DEPARTMENT_KEYWORDS: List[List[str]] = [
     ["Sthaulya", PANCHAKARMA],
+    ["sthaulya", PANCHAKARMA],
+    ["obesity", PANCHAKARMA],
+    ["medoroga", PANCHAKARMA],
+    ["weight gain", PANCHAKARMA],
+    ["detox", PANCHAKARMA],
+    ["shodhana", PANCHAKARMA],
 ]
 
 # Queue token prefix per department (Stitch refs: KY-014, PK-008).

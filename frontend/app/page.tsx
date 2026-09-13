@@ -21,11 +21,7 @@ export default function HomePage() {
     setSelectedLanguage(code);
   }
 
-  function handleStatusClick(status: "new" | "returning") {
-    // P0: Returning Patient is visual-only; New Patient stays the default.
-    if (status !== "new") return;
-    setPatientStatus("new");
-  }
+
 
   function handleContinue() {
     // P01 -> P02 handoff: persist the chosen language so the session created on
@@ -57,6 +53,25 @@ export default function HomePage() {
           ))}
         </nav>
         <div className="mk-p01-header__right">
+          <button
+            type="button"
+            onClick={() => router.push("/patient")}
+            className="mk-p01-header__action"
+            style={{
+              backgroundColor: "#DC2626",
+              color: "#FFFFFF",
+              fontWeight: 700,
+              padding: "6px 12px",
+              borderRadius: "6px",
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              border: "1px solid #B91C1C",
+            }}
+            aria-label="Request immediate emergency medical assistance"
+          >
+            <span aria-hidden="true">🚨</span> Need Help Now
+          </button>
           <button className="mk-p01-header__action" aria-label="Reset" type="button">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
             Reset
@@ -114,29 +129,18 @@ export default function HomePage() {
           <div className="mk-p01-section">
             <div className="mk-p01-section__header">
               <h2 className="mk-p01-section__title">2. PATIENT STATUS</h2>
-              <span className="mk-p01-section__hint">Touch to change</span>
+              <span className="mk-p01-section__hint">First time OPD visit</span>
             </div>
             <div className="mk-p01-status-grid">
               <button
                 type="button"
-                className={`mk-p01-status-card ${patientStatus === "new" ? "mk-p01-status-card--active" : ""}`}
-                onClick={() => handleStatusClick("new")}
+                className="mk-p01-status-card mk-p01-status-card--active"
+                onClick={() => setPatientStatus("new")}
               >
                 <span className="mk-p01-status-card__dot" />
                 <div>
                   <span className="mk-p01-status-card__label">New Patient</span>
                   <span className="mk-p01-status-card__sub">First visit</span>
-                </div>
-              </button>
-              <button
-                type="button"
-                className="mk-p01-status-card"
-                onClick={() => handleStatusClick("returning")}
-              >
-                <span className="mk-p01-status-card__dot" />
-                <div>
-                  <span className="mk-p01-status-card__label">Returning Patient</span>
-                  <span className="mk-p01-status-card__sub">Visit history exists</span>
                 </div>
               </button>
             </div>
