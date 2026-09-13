@@ -75,7 +75,6 @@ export function PatientFlow() {
   const [language, setLanguage] = useState(() =>
     typeof window !== "undefined" ? window.sessionStorage.getItem("medikiosk_preferred_language") || "en" : "en"
   );
-  const [visitType, setVisitType] = useState("new");
   const [consentChecked, setConsentChecked] = useState(false);
   const router = useRouter();
 
@@ -173,7 +172,7 @@ export function PatientFlow() {
     setLoading(true);
     try {
       const patient: Patient = { name: name.trim(), age: Number(age), gender };
-      const res = await startPatientSession(patient, language, visitType);
+      const res = await startPatientSession(patient, language, "new");
       setSessionId(res.session_id);
       window.sessionStorage.setItem(SESSION_KEY, res.session_id);
       setScreen("consent");
@@ -1167,13 +1166,9 @@ export function PatientFlow() {
             <div className="mk-form-group">
               <label className="mk-field-label">Visit status</label>
               <div className="mk-chip-group">
-                <button
-                  type="button"
-                  className="mk-chip selected"
-                  onClick={() => setVisitType("new")}
-                >
+                <div className="mk-chip selected">
                   New Patient
-                </button>
+                </div>
               </div>
             </div>
 

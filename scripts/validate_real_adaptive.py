@@ -1,7 +1,7 @@
 """scripts/validate_real_adaptive.py
 
 Phase 1.5: Real LLM Provider & Multi-Turn Adaptive Interview Validation.
-Executes live non-mocked API calls against real configured LLM providers (Groq / NVIDIA NIM / OpenRouter).
+Executes live non-mocked API calls against real configured LLM providers (Groq / Cerebras / NVIDIA NIM).
 Validates:
 1. Real Provider Execution & Schema Compliance
 2. Provider Failure & Secondary Fallback Chain
@@ -32,8 +32,8 @@ from backend.services.llm_provider import (
     get_llm_provider,
     iter_llm_providers,
     GroqProvider,
+    CerebrasProvider,
     NvidiaNimProvider,
-    OpenRouterProvider,
     LLMProvider,
 )
 from backend.rules.adaptive_interview import (
@@ -73,7 +73,7 @@ def start_live_session(name: str, age: int, gender: str, language: str = "en") -
 
 async def run_provider_verification() -> Dict[str, Any]:
     print("\n" + "=" * 65)
-    print("1. REAL PROVIDER TEST — NO MOCKS (Groq / NVIDIA NIM / OpenRouter)")
+    print("1. REAL PROVIDER TEST — NO MOCKS (Groq / Cerebras / NVIDIA NIM)")
     print("=" * 65)
 
     primary = get_llm_provider()
@@ -231,7 +231,7 @@ async def test_provider_failover() -> Dict[str, Any]:
         "latest_patient_answer": "I have heartburn after eating.",
     }
 
-    # Step 1: Simulate Primary Failure (Corrupt Groq key -> fallback to NVIDIA NIM / OpenRouter)
+    # Step 1: Simulate Primary Failure (Corrupt Groq key -> fallback to Cerebras / NVIDIA NIM)
     print("  [+] Simulating Primary Provider (Groq) Failure...")
     broken_primary = GroqProvider(api_key="gsk_invalid_test_key_for_failover_simulation")
     

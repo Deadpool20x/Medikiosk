@@ -4,6 +4,7 @@ import pytest
 from backend.services.llm_provider import (
     GeminiProvider,
     GroqProvider,
+    CerebrasProvider,
     NvidiaNimProvider,
     OpenRouterProvider,
     LLMProvider,
@@ -48,27 +49,39 @@ def test_new_providers_unconfigured_by_default(monkeypatch):
     monkeypatch.delenv("NVIDIA_NIM_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
     assert NvidiaNimProvider().is_configured() is False
     assert OpenRouterProvider().is_configured() is False
     assert GroqProvider().is_configured() is False
+    assert CerebrasProvider().is_configured() is False
 
 
 def test_new_providers_configured_with_keys(monkeypatch):
     monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nvapi-test")
     monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("CEREBRAS_API_KEY", "csk-test")
     assert NvidiaNimProvider().is_configured() is True
     assert OpenRouterProvider().is_configured() is True
     assert GroqProvider().is_configured() is True
+    assert CerebrasProvider().is_configured() is True
     assert NvidiaNimProvider().provider_name == "nvidia_nim"
     assert OpenRouterProvider().provider_name == "openrouter"
+    assert CerebrasProvider().provider_name == "cerebras"
+
+
+def test_nvidia_nim_capped_timeout():
+    p = NvidiaNimProvider()
+    assert p._timeout == 7.0
 
 
 def test_placeholders_rejected(monkeypatch):
     monkeypatch.setenv("NVIDIA_NIM_API_KEY", "your_key_here")
     monkeypatch.setenv("OPENROUTER_API_KEY", "CHANGE_ME")
+    monkeypatch.setenv("CEREBRAS_API_KEY", "placeholder")
     assert NvidiaNimProvider().is_configured() is False
     assert OpenRouterProvider().is_configured() is False
+    assert CerebrasProvider().is_configured() is False
 
 
 @pytest.mark.parametrize("bad_key", [
@@ -131,12 +144,13 @@ def test_provider_diagnostics_never_leaks_key(monkeypatch):
     assert diag["nvidia_nim"]["api_key"] == "missing"
 
 
-def test_chain_order_is_groq_nim_openrouter():
-    assert LLM_CHAIN == [GroqProvider, NvidiaNimProvider, OpenRouterProvider]
+def test_chain_order_is_groq_cerebras_nim():
+    assert LLM_CHAIN == [GroqProvider, CerebrasProvider, NvidiaNimProvider]
 
 
 def test_iter_llm_providers_priority(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
     monkeypatch.delenv("NVIDIA_NIM_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     providers = iter_llm_providers()
@@ -145,6 +159,7 @@ def test_iter_llm_providers_priority(monkeypatch):
 
 def test_iter_llm_providers_skips_unconfigured(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
     monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nvapi-test")
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     providers = iter_llm_providers()
@@ -153,14 +168,16 @@ def test_iter_llm_providers_skips_unconfigured(monkeypatch):
 
 def test_iter_llm_providers_all_three(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("CEREBRAS_API_KEY", "csk-test")
     monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nvapi-test")
-    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     providers = iter_llm_providers()
-    assert [p.provider_name for p in providers] == ["groq", "nvidia_nim", "openrouter"]
+    assert [p.provider_name for p in providers] == ["groq", "cerebras", "nvidia_nim"]
 
 
 def test_iter_llm_providers_raises_when_none(monkeypatch):
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("CEREBRAS_API_KEY", raising=False)
     monkeypatch.delenv("NVIDIA_NIM_API_KEY", raising=False)
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     with pytest.raises(RuntimeError):
@@ -171,3 +188,49 @@ def test_get_llm_provider_returns_first(monkeypatch):
     monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
     monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nvapi-test")
     assert get_llm_provider().provider_name == "groq"
+
+
+@pytest.mark.asyncio
+async def test_nvidia_nim_failover_on_timeout():
+    from unittest.mock import AsyncMock
+    import httpx
+    from backend.services.llm_provider import generate_adaptive_turn
+
+    nim = NvidiaNimProvider(api_key="nvapi-test")
+    # Simulate slow/timeout NVIDIA NIM call (raises ReadTimeout under capped 7s timeout)
+    nim.generate = AsyncMock(side_effect=httpx.ReadTimeout("Request timed out after 7.0s"))
+
+    cerebras = CerebrasProvider(api_key="csk-test")
+    cerebras.generate = AsyncMock(return_value=json.dumps({
+        "case_update": {
+            "presentation": "digestive",
+            "concepts": {"site": "stomach"},
+            "denied_concepts": [],
+            "mentioned_documents": [],
+        },
+        "next_question": {
+            "text": "How long has it been hurting?",
+            "target_concept": "duration",
+            "reason": "Assess timeline",
+            "priority": "high",
+        },
+        "status": "continue",
+        "confidence": 0.9,
+    }))
+
+    context = {
+        "language": "en",
+        "presentation_domain": "Digestive",
+        "interview_step": "hpi",
+        "collected_concepts": {},
+        "denied_concepts": [],
+        "last_patient_answer": "My stomach hurts",
+        "turns_count": 1,
+        "questions_asked": [],
+    }
+
+    result = await generate_adaptive_turn(context, providers=[nim, cerebras])
+    assert result is not None
+    assert result["provider"] == "cerebras"
+    assert nim.generate.called
+    assert cerebras.generate.called

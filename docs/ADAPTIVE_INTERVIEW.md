@@ -159,7 +159,7 @@ MediKiosk generates conversational questions directly in the patient's selected 
 To maintain 100% kiosk uptime, the engine implements a tiered failover topology:
 
 1. **Primary LLM Provider**: High-performance primary model (e.g. Groq `llama-3.3-70b-versatile`).
-2. **Secondary Fallback Provider**: High-throughput fallback model (e.g. NVIDIA NIM `meta/llama-3.3-70b-instruct` or OpenRouter).
+2. **Secondary Fallback Provider**: High-throughput fallback model (e.g. Cerebras `llama-3.3-70b`).
 3. **Local Deterministic Fallback**: If all network or provider calls fail, or if proposed questions fail validator checks, `get_fallback_question()` queries the local knowledge table for the next highest-priority missing concept.
 4. **No Stall Invariant**: When an LLM returns malformed JSON or empty dictionaries, the patient's raw response is captured, `needs_review` is flagged, and the deterministic fallback advances the interview to the next logical concept. The kiosk never stalls on an empty textarea.
 

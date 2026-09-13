@@ -108,7 +108,7 @@ flowchart TD
 - **Backend**: FastAPI, Uvicorn, Python 3.11+, Pydantic v2.
 - **Database**: SQLite with Write-Ahead Logging (`PRAGMA journal_mode = WAL;`), 30-second busy timeout locks, and compound query indexes.
 - **Multi-Provider AI Fallback**:
-  - **Conversational Extraction**: Groq (`openai/gpt-oss-20b`), NVIDIA NIM, OpenRouter.
+  - **Conversational Extraction**: Groq (`openai/gpt-oss-20b`) → Cerebras (`llama-3.3-70b`) → NVIDIA NIM. OpenRouter is defined as a provider class but excluded from the LLM chain (dead credentials).
   - **Prescription Vision OCR**: Google Gemini Vision (`gemini-2.5-flash`, env-configurable via `GEMINI_VISION_MODEL`), Groq Vision (`llama-3.2-11b-vision-preview`).
 
 ---
@@ -215,9 +215,11 @@ Open Kiosk: [http://localhost:3000](http://localhost:3000) • Doctor Workspace:
 | :--- | :--- | :--- |
 | `GROQ_API_KEY` | *(Required for LLM)* | Groq Cloud API key for interview extraction |
 | `GROQ_MODEL` | `openai/gpt-oss-20b` | Model ID used for conversational extraction |
+| `CEREBRAS_API_KEY` | *(Optional)* | Cerebras Cloud API key for LLM fallback (1M tokens/day free tier) |
+| `CEREBRAS_MODEL` | `llama-3.3-70b` | Cerebras model ID for conversational extraction |
 | `GEMINI_API_KEY` | *(Optional)* | Google Gemini API key for prescription OCR |
 | `GEMINI_VISION_MODEL` | `gemini-2.5-flash` | Configurable Google Gemini Vision model ID |
-| `NVIDIA_NIM_API_KEY` | *(Optional)* | NVIDIA NIM vision fallback key |
+| `NVIDIA_NIM_API_KEY` | *(Optional)* | NVIDIA NIM fallback key (capped 7s timeout) |
 | `BACKEND_PORT` | `8000` | FastAPI server listening port |
 | `DATABASE_URL` | `sqlite:///./backend/data/medikiosk.db` | SQLite database connection string |
 | `NEXT_PUBLIC_API_URL`| `http://localhost:8000` | Target backend REST endpoint for Next.js |

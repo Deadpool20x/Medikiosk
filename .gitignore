@@ -191,6 +191,7 @@ test.png
 
 # Test Artifacts & QA outputs
 test-artifacts/
+.playwright-mcp/
 stitch_medikiosk_FINAL/p0_shots/
 stitch_medikiosk_FINAL/p0_fix_shots/
 live_validation_results.json

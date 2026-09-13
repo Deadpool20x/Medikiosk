@@ -22,7 +22,7 @@
    - Token generation uses atomic transactions with sequence locking.
 
 4. **Multi-Provider AI Fallback**:
-   - Chat/Extraction: Groq (`openai/gpt-oss-20b`), NVIDIA NIM, OpenRouter.
+    - Chat/Extraction: Groq (`openai/gpt-oss-20b`) → Cerebras (`llama-3.3-70b`) → NVIDIA NIM. OpenRouter excluded (dead credentials).
    - Vision OCR: Google Gemini Vision (`gemini-2.5-flash`), Groq Vision (`qwen/qwen3.6-27b`).
    - Confidence threshold: 0.5. Values below threshold require physician review in D03.
 

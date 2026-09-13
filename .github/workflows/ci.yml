@@ -2,9 +2,9 @@ name: MediKiosk CI
 
 on:
   push:
-    branches: [ main, release/* ]
+    branches: [ main, release/*, feat/* ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, release/*, feat/* ]
 
 jobs:
   backend-test:
@@ -13,8 +13,8 @@ jobs:
 
     env:
       GROQ_API_KEY: "dummy-ci-groq-key"
+      CEREBRAS_API_KEY: "dummy-ci-cerebras-key"
       NVIDIA_NIM_API_KEY: "dummy-ci-nvidia-key"
-      OPENROUTER_API_KEY: "dummy-ci-openrouter-key"
       DATABASE_URL: "sqlite:///./ci_test.db"
 
     steps:

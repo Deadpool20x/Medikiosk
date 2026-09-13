@@ -22,7 +22,12 @@ GROQ_MODEL=openai/gpt-oss-20b
 # Get key at: https://aistudio.google.com/app/apikey
 GEMINI_API_KEY=your_gemini_api_key_here
 
-# OpenRouter (Fallback LLM provider)
+# Cerebras (Fallback LLM provider — fast inference, no agentic tool-use, 1M tokens/day free)
+# Get key at: https://cloud.cerebras.ai
+CEREBRAS_API_KEY=your_cerebras_api_key_here
+CEREBRAS_MODEL=llama-3.3-70b
+
+# OpenRouter (Defined but excluded from the production LLM chain — dead credentials)
 # Get key at: https://openrouter.ai/keys
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free

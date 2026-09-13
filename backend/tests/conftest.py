@@ -2,6 +2,7 @@ import pytest
 
 PROVIDER_API_KEYS = [
     "GROQ_API_KEY",
+    "CEREBRAS_API_KEY",
     "NVIDIA_NIM_API_KEY",
     "OPENROUTER_API_KEY",
     "GEMINI_API_KEY",

@@ -54,6 +54,8 @@ def _clean_json_text(raw: str) -> str:
 
 def _parse_llm_json(raw: str) -> Dict[str, Any]:
     cleaned = _clean_json_text(raw)
+    if not cleaned:
+        raise ValueError(f"No JSON object found in LLM response: {raw[:100]!r}")
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
@@ -118,7 +120,9 @@ class OpenAICompatibleProvider(LLMProvider):
         msg = choices[0].get("message") or {}
         content = msg.get("content")
         if not content and msg.get("reasoning"):
-            content = msg.get("reasoning")
+            reasoning = msg.get("reasoning")
+            if reasoning and ("{" in reasoning and "}" in reasoning):
+                content = reasoning
         return content
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
@@ -138,6 +142,15 @@ class GroqProvider(OpenAICompatibleProvider):
     base_url = "https://api.groq.com/openai/v1"
     name = "groq"
 
+    async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
+        if not self.is_configured():
+            raise RuntimeError(f"{self.provider_name} API key is not configured")
+        extra_body = dict(kwargs.get("extra_body") or {})
+        if system_prompt and "json" in system_prompt.lower() and "response_format" not in extra_body:
+            extra_body["response_format"] = {"type": "json_object"}
+        kwargs["extra_body"] = extra_body
+        return await super().generate(prompt, system_prompt=system_prompt, **kwargs)
+
 
 class NvidiaNimProvider(OpenAICompatibleProvider):
     default_model = "meta/llama-3.2-11b-vision-instruct"
@@ -145,6 +158,11 @@ class NvidiaNimProvider(OpenAICompatibleProvider):
     env_model_key = "NVIDIA_NIM_MODEL"
     base_url = "https://integrate.api.nvidia.com/v1"
     name = "nvidia_nim"
+
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None,
+                 base_url: Optional[str] = None, timeout: float = 7.0):
+        # Cap client-side timeout specifically on NVIDIA NIM to 7.0s for prompt failover
+        super().__init__(api_key=api_key, model_name=model_name, base_url=base_url, timeout=timeout)
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
         if not self.is_configured():
@@ -158,6 +176,24 @@ class NvidiaNimProvider(OpenAICompatibleProvider):
             extra_body=kwargs.get("extra_body"),
             extra_headers={"Accept": "application/json"},
         )
+
+
+class CerebrasProvider(OpenAICompatibleProvider):
+    """Cerebras Cloud Inference provider (llama-3.3-70b, fast inference, no agentic tool-use)."""
+    default_model = "llama-3.3-70b"
+    env_key = "CEREBRAS_API_KEY"
+    env_model_key = "CEREBRAS_MODEL"
+    base_url = "https://api.cerebras.ai/v1"
+    name = "cerebras"
+
+    async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
+        if not self.is_configured():
+            raise RuntimeError(f"{self.provider_name} API key is not configured")
+        extra_body = dict(kwargs.get("extra_body") or {})
+        if system_prompt and "json" in system_prompt.lower() and "response_format" not in extra_body:
+            extra_body["response_format"] = {"type": "json_object"}
+        kwargs["extra_body"] = extra_body
+        return await super().generate(prompt, system_prompt=system_prompt, **kwargs)
 
 
 class OpenRouterProvider(OpenAICompatibleProvider):
@@ -224,7 +260,9 @@ class GeminiProvider(LLMProvider):
 
 # LLM chat chain order. Each provider is tried in sequence; on exception the
 # next one is attempted. The chain is built from whatever is configured.
-LLM_CHAIN: List[type] = [GroqProvider, NvidiaNimProvider, OpenRouterProvider]
+# Cerebras provides 1M tokens/day fast failover without agentic tools;
+# OpenRouter is excluded to avoid 401s on dead credentials.
+LLM_CHAIN: List[type] = [GroqProvider, CerebrasProvider, NvidiaNimProvider]
 
 
 def _configured_providers() -> List[LLMProvider]:
