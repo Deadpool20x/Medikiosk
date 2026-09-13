@@ -17,6 +17,7 @@ import json
 import os
 import sys
 import re
+import time
 from typing import Any, Dict, List
 from dotenv import load_dotenv
 
@@ -64,9 +65,17 @@ def run_interview_flow(name: str, age: int, gender: str, lang: str, answers: Lis
     sid = start_session(name, age, gender, lang)
     turns = []
     for idx, ans in enumerate(answers):
+        ta = time.perf_counter()
         res = CLIENT.post(f"/session/{sid}/answer", json={"answer": ans})
+        latency_ms = (time.perf_counter() - ta) * 1000.0
         assert res.status_code == 200, res.text
         data = res.json()
+        collected_after = {}
+        try:
+            snap = CLIENT.get(f"/session/{sid}").json()
+            collected_after = snap.get("collected_concepts", {}) or {}
+        except Exception:
+            pass
         turns.append({
             "turn": idx + 1,
             "answer": ans,
@@ -74,12 +83,15 @@ def run_interview_flow(name: str, age: int, gender: str, lang: str, answers: Lis
             "session_complete": data.get("session_complete"),
             "needs_review": data.get("needs_review"),
             "domain": data.get("presentation_domain"),
+            "collected_after": collected_after,
+            "latency_ms": round(latency_ms, 1),
         })
         if data.get("session_complete"):
             break
 
     session_res = CLIENT.get(f"/session/{sid}")
     session_data = session_res.json()
+    latencies = [t["latency_ms"] for t in turns if t.get("latency_ms") is not None]
     return {
         "session_id": sid,
         "language": lang,
@@ -88,6 +100,7 @@ def run_interview_flow(name: str, age: int, gender: str, lang: str, answers: Lis
         "denied_concepts": session_data.get("denied_concepts", []),
         "asked_questions": session_data.get("asked_questions", []),
         "presentation_domain": session_data.get("presentation_domain"),
+        "avg_turn_latency_ms": round(sum(latencies) / len(latencies), 1) if latencies else 0.0,
     }
 
 
@@ -115,17 +128,38 @@ def evaluate_case_quality(case_result: Dict[str, Any]) -> Dict[str, Any]:
     else:
         issues.append("insufficient_concepts_extracted")
 
-    # 2. Repetition Absence
+    # 2. Repetition Absence (order-aware: only flag a duration question if the
+    # duration was already collected in the same/earlier turn, i.e. the question
+    # genuinely re-asks an already-supplied fact).
+    DURATION_KEYWORDS = ["how long", "how many days", "since when", "કેટલા સમય", "કેટલા દિવસ", "कितने समय"]
     has_rep = False
-    duration_collected = "duration" in collected and bool(str(collected["duration"]).strip())
-    for q in questions:
+    for t in turns:
+        q = t.get("next_question")
+        if not q:
+            continue
         q_lower = q.lower()
-        if duration_collected and any(w in q_lower for w in ["how long", "how many days", "since when", "કેટલા સમય", "કેટલા દિવસ", "कितने समय"]):
+        if not any(w in q_lower for w in DURATION_KEYWORDS):
+            continue
+        snap = t.get("collected_after") or {}
+        if "duration" in snap and bool(str(snap.get("duration", "")).strip()):
             has_rep = True
             issues.append("duration_repetition")
             break
     if not has_rep:
         score += 0.5
+
+    # Awkward-language detection (report-only; the validator now rejects these,
+    # so their presence in a transcript indicates a validation bypass).
+    awkward = []
+    markers_gu = ["શું", "કેટલા", "કેટલી", "કેટલાં", "ક્યારે", "ક્યાં", "કયા", "કઈ", "કયું", "કેવી", "કેવું", "કેવા", "કેમ", "શાના"]
+    markers_hi = ["क्या", "कितने", "कितनी", "कब", "कहाँ", "कैसे", "कैसा", "कौन", "कौनसा"]
+    for t in turns:
+        q = t.get("next_question")
+        if not q or len(q) > 60:
+            continue
+        markers = markers_gu if case_result["language"] == "gu" else (markers_hi if case_result["language"] == "hi" else [])
+        if markers and not any(m in q for m in markers):
+            awkward.append(q)
 
     # 3. Category & Negative protection
     has_mismatch = False
@@ -164,6 +198,7 @@ def evaluate_case_quality(case_result: Dict[str, Any]) -> Dict[str, Any]:
         "issues": issues,
         "repetition": has_rep,
         "mismatch": has_mismatch,
+        "awkward_examples": awkward,
     }
 
 
@@ -245,18 +280,25 @@ def main():
     print("=" * 70)
 
     scores_en = []
-    scores_multi = []
+    scores_hi = []
+    scores_gu = []
     total_reps = 0
     total_mismatches = 0
     total_turns = 0
+    all_latencies = []
+    all_awkward = []
 
     for name, c_res in cases:
         eval_res = evaluate_case_quality(c_res)
         lang = c_res["language"]
         if lang == "en":
             scores_en.append(eval_res["score"])
+        elif lang == "hi":
+            scores_hi.append(eval_res["score"])
         else:
-            scores_multi.append(eval_res["score"])
+            scores_gu.append(eval_res["score"])
+        all_latencies.extend([t["latency_ms"] for t in c_res["turns"] if t.get("latency_ms") is not None])
+        all_awkward.extend(eval_res["awkward_examples"])
 
         if eval_res["repetition"]:
             total_reps += 1
@@ -269,37 +311,53 @@ def main():
         print(f"  Domain: {c_res['presentation_domain']}")
         print(f"  Collected: {c_res['collected_concepts']}")
         print(f"  Denied: {c_res['denied_concepts']}")
+        print(f"  Avg turn latency: {c_res['avg_turn_latency_ms']} ms")
         print(f"  Turns ({len(c_res['turns'])}):")
         for t in c_res["turns"]:
             print(f"    T{t['turn']} Answer: {t['answer']}")
             print(f"    T{t['turn']} Next Q: {t['next_question']}")
         if eval_res["issues"]:
             print(f"  Issues flagged: {eval_res['issues']}")
+        if eval_res["awkward_examples"]:
+            print(f"  Awkward-language questions: {eval_res['awkward_examples']}")
 
     avg_en = sum(scores_en) / len(scores_en) if scores_en else 0.0
+    avg_hi = sum(scores_hi) / len(scores_hi) if scores_hi else 0.0
+    avg_gu = sum(scores_gu) / len(scores_gu) if scores_gu else 0.0
+    scores_multi = scores_hi + scores_gu
     avg_multi = sum(scores_multi) / len(scores_multi) if scores_multi else 0.0
     all_scores = scores_en + scores_multi
     avg_overall = sum(all_scores) / len(all_scores) if all_scores else 0.0
+    avg_latency = sum(all_latencies) / len(all_latencies) if all_latencies else 0.0
 
     print("\n" + "=" * 70)
     print("PHASE 1.7 ACCEPTANCE TARGET METRICS")
     print("=" * 70)
     print(f"English Score:       {avg_en:.2f} / 2.0  (Target: >= 1.70) -> {'PASS' if avg_en >= 1.70 else 'FAIL'}")
+    print(f"Hindi Score:         {avg_hi:.2f} / 2.0")
+    print(f"Gujarati Score:      {avg_gu:.2f} / 2.0")
     print(f"Multilingual Score:  {avg_multi:.2f} / 2.0  (Target: >= 1.50) -> {'PASS' if avg_multi >= 1.50 else 'FAIL'}")
     print(f"Overall Score:       {avg_overall:.2f} / 2.0  (Target: >= 1.65) -> {'PASS' if avg_overall >= 1.65 else 'FAIL'}")
-    print(f"Repetition Rate:     {total_reps / len(cases) * 100:.1f}% (0 / {len(cases)})")
-    print(f"Category Mismatch:   {total_mismatches / len(cases) * 100:.1f}% (0 / {len(cases)})")
+    print(f"Repetition Rate:     {total_reps / len(cases) * 100:.1f}% ({total_reps} / {len(cases)})")
+    print(f"Category Mismatch:   {total_mismatches / len(cases) * 100:.1f}% ({total_mismatches} / {len(cases)})")
     print(f"Average Turns:       {total_turns / len(cases):.1f}")
+    print(f"Avg turn latency:    {avg_latency:.0f} ms")
+    if all_awkward:
+        print(f"Awkward-language questions logged: {all_awkward}")
 
     # Output JSON summary
     out_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "phase17_audit_results.json"))
     with open(out_file, "w", encoding="utf-8") as f:
         json.dump({
             "english_score": round(avg_en, 2),
+            "hindi_score": round(avg_hi, 2),
+            "gujarati_score": round(avg_gu, 2),
             "multilingual_score": round(avg_multi, 2),
             "overall_score": round(avg_overall, 2),
             "repetition_rate": total_reps / len(cases),
             "category_mismatch_rate": total_mismatches / len(cases),
+            "avg_turn_latency_ms": round(avg_latency, 1),
+            "awkward_examples": all_awkward,
             "cases_audited": len(cases),
         }, f, indent=2)
     print(f"\nSaved audit results to {out_file}")

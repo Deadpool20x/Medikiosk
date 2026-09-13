@@ -350,11 +350,16 @@ async def generate_adaptive_turn(
     lang_instructions = {
         "hi": (
             "The patient's language is Hindi (hi). Generate next_question.text in simple, "
-            "polite, conversational Hindi (Devanagari script). Keep all concept keys and JSON in English."
+            "polite, conversational Hindi (Devanagari script), as a COMPLETE question starting "
+            "with a question word such as क्या, कितने, कब, कहाँ, कैसे, कैसा. Never use an "
+            "elliptical fragment and never drop the subject. Keep all concept keys and JSON in English."
         ),
         "gu": (
             "The patient's language is Gujarati (gu). Generate next_question.text in simple, "
-            "polite, conversational Gujarati (Gujarati script). Keep all concept keys and JSON in English."
+            "polite, conversational Gujarati (Gujarati script), as a COMPLETE question starting "
+            "with a question word such as શું, કેટલા, ક્યારે, ક્યાં, કયા, કેવી, કેવું. Never use "
+            "an elliptical fragment (never begin with નથી) and never drop the subject. "
+            "Keep all concept keys and JSON in English."
         ),
         "en": (
             "The patient's language is English (en). Generate next_question.text in clear, "
@@ -472,8 +477,12 @@ async def correct_adaptive_turn(
     language = session_context.get("language", "en")
 
     lang_instructions = {
-        "hi": ("Respond in simple, polite conversational Hindi (Devanagari script). Keep concept keys and JSON in English."),
-        "gu": ("Respond in simple, polite conversational Gujarati (Gujarati script). Keep concept keys and JSON in English."),
+        "hi": ("Respond in simple, polite conversational Hindi (Devanagari script) as a COMPLETE question "
+               "starting with a question word such as क्या, कितने, कब, कहाँ. Never use an elliptical fragment. "
+               "Keep concept keys and JSON in English."),
+        "gu": ("Respond in simple, polite conversational Gujarati (Gujarati script) as a COMPLETE question "
+               "starting with a question word such as શું, કેટલા, ક્યારે, ક્યાં. Never use an elliptical "
+               "fragment (never begin with નથી). Keep concept keys and JSON in English."),
         "en": ("Respond in clear, respectful, non-technical English."),
     }.get(language, "Respond in clear, respectful, non-technical English.")
 

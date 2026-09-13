@@ -16,6 +16,7 @@ from backend.rules.adaptive_interview import (
     extract_concepts_from_payload,
     extract_concepts_from_text,
     extract_denied_concepts,
+    merge_extracted_concept,
     find_concept_conflicts,
     select_next_question,
     evaluate_conversational_sufficiency,
@@ -632,7 +633,8 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     # Update collected concepts in session
     for c_k, c_v in concepts.items():
         if _usable_concept_value(c_v):
-            session.collected_concepts[c_k] = c_v
+            prev = session.collected_concepts.get(c_k)
+            session.collected_concepts[c_k] = merge_extracted_concept(prev, c_v)
 
     # Documents
     doc_matches = extract_mentioned_documents(payload.answer)

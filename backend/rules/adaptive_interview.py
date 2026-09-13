@@ -1021,6 +1021,17 @@ def validate_llm_proposal(
     if not _question_matches_language_script(q_text, patient_lang):
         reasons.append(f"Question text is not written in the patient's language script (language='{patient_lang}')")
 
+    # Check K: Gujarati/Hindi questions must be complete questions, not elliptical fragments.
+    # Short ambiguous fragments (e.g. "નથી જમ્યા પછી જાય છે?") have no question word and
+    # read unnaturally; require an explicit question marker so the correction pass rephrases.
+    if patient_lang in ("gu", "hi") and len(q_text.strip()) <= 60:
+        q_markers = {
+            "gu": ["શું", "કેટલા", "કેટલી", "કેટલાં", "ક્યારે", "ક્યાં", "કયા", "કઈ", "કયું", "કેવી", "કેવું", "કેવા", "કેમ", "શાના"],
+            "hi": ["क्या", "कितने", "कितनी", "कब", "कहाँ", "कैसे", "कैसा", "कौन", "कौनसा"],
+        }
+        if not any(m in q_text for m in q_markers[patient_lang]):
+            reasons.append("Question text is an elliptical fragment without a question word (language-marker guard)")
+
     if reasons:
         return ValidationResult(
             valid=False,
@@ -1394,6 +1405,40 @@ def extract_mentioned_documents(text: str) -> List[str]:
     return found
 
 
+def _norm_concept_text(value: str) -> str:
+    return re.sub(r"[^\w\s]", "", value.lower()).strip()
+
+
+def merge_extracted_concept(existing_value: Any, new_value: Any) -> Any:
+    """Case-state semantic duplicate-information suppression.
+
+    Returns the value to persist when a freshly extracted concept value is
+    merged over a previously collected one. Exact restatements and
+    near-paraphrases are suppressed (the existing value is kept); genuinely
+    new information (e.g. worsening added to a duration) is preserved.
+    """
+    if existing_value is None or not str(existing_value).strip():
+        return new_value
+    if new_value is None or not str(new_value).strip():
+        return existing_value
+    e = _norm_concept_text(str(existing_value))
+    n = _norm_concept_text(str(new_value))
+    if not n:
+        return existing_value
+    if e == n:
+        return existing_value                 # exact repetition -> suppress
+    if n in e:
+        return existing_value                 # paraphrase subset of existing
+    if e in n:
+        if len(e) / max(len(n), 1) >= 0.6:
+            return existing_value             # repeat + trivial padding
+        return new_value                      # richer statement -> preserve it
+    we, wn = set(e.split()), set(n.split())
+    if we and wn and len(we & wn) / max(len(we), len(wn)) >= 0.8:
+        return existing_value                 # paraphrased repetition -> suppress
+    return new_value
+
+
 def extract_concepts_from_text(text: str, domain: Optional[str] = None) -> Dict[str, Any]:
     if not text:
         return {}
@@ -1408,6 +1453,16 @@ def extract_concepts_from_text(text: str, domain: Optional[str] = None) -> Dict[
     )
     if not dur_match:
         dur_match = re.search(r"\b(\d+\s*(?:days?|weeks?|months?|years?))\b", lower)
+    # English word durations without a leading marker: "for the past month".
+    if not dur_match:
+        dur_match = re.search(r"\b((?:past|last|previous)\s+(?:day|week|month|year))\b", lower)
+    # English word-number durations anchored by "ago": "four days ago".
+    if not dur_match:
+        dur_match = re.search(
+            r"\b((?:a|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)"
+            r"\s+(?:days?|weeks?|months?|years?))\s+ago\b",
+            lower,
+        )
     # Hindi duration: "पांच दिन से", "दो हफ्ते से", "छह महीने"
     if not dur_match:
         hi_dur = re.search(r"((?:[०-९\d]+|एक|दो|तीन|चार|पांच|पाँच|छह|सात|आठ|नौ|दस)\s*(?:दिन|हफ्ते|सप्ताह|महीने|महीनों|साल|वर्ष)(?:\s*से)?)", text)
