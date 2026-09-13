@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { startPatientSession, triggerEmergency } from "../lib/api";
 
 const LANGUAGE_KEY = "medikiosk_preferred_language";
 
@@ -20,13 +21,27 @@ export default function HomePage() {
     setSelectedLanguage(code);
   }
 
-
-
   function handleContinue() {
     // P01 -> P02 handoff: persist the chosen language so the session created on
     // /patient (POST /session/start) carries it. New Patient is the P0 default.
     window.sessionStorage.setItem(LANGUAGE_KEY, selectedLanguage);
     router.push("/patient");
+  }
+
+  async function handleEmergency() {
+    try {
+      const res = await startPatientSession(
+        { name: "Emergency Walk-In", age: 0, gender: "other" },
+        selectedLanguage,
+        "new"
+      );
+      window.sessionStorage.setItem("medikiosk_session_id", res.session_id);
+      await triggerEmergency(res.session_id);
+    } catch (e) {
+      console.error("Emergency trigger from landing page failed:", e);
+    } finally {
+      router.push("/patient");
+    }
   }
 
   return (
@@ -54,8 +69,9 @@ export default function HomePage() {
         <div className="mk-p01-header__right">
           <button
             type="button"
-            onClick={() => router.push("/patient")}
-            className="mk-p01-header__action"
+            onClick={handleEmergency}
+            className="mk-p01-header__action mk-emergency-btn"
+            id="mk-always-visible-emergency-btn"
             style={{
               backgroundColor: "#DC2626",
               color: "#FFFFFF",

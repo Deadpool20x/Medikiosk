@@ -1,0 +1,153 @@
+{
+  "results": {
+    "English": {
+      "session_id": "cff8abfe-9105-4e02-9490-710b8803ff6b",
+      "patient_code": "AIIA-202609-00012",
+      "turns": [
+        {
+          "turn": 1,
+          "answer": "I have been having persistent lower back pain and joint stiffness in the mornings.",
+          "latency_s": 1.47,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "How long have you been experiencing this lower back pain and stiffness?"
+        },
+        {
+          "turn": 2,
+          "answer": "It started about two months ago after some heavy gardening work.",
+          "latency_s": 1.64,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "On a scale from 1 to 10, how would you rate your back pain?"
+        },
+        {
+          "turn": 3,
+          "answer": "The pain is about a 6 out of 10, worse when sitting for long periods.",
+          "latency_s": 1.57,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "Does the pain limit your ability to perform daily activities such as walking, bending, or lifting?"
+        },
+        {
+          "turn": 4,
+          "answer": "It feels like a dull, aching sensation with occasional sharpness when standing up.",
+          "latency_s": 1.69,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "Do you have any tingling, numbness, weakness, or changes in bowel or bladder function?"
+        },
+        {
+          "turn": 5,
+          "answer": "I also notice some fatigue in the afternoons, but no fever or numbness.",
+          "latency_s": 6.1,
+          "http_status": 200,
+          "provider": "nvidia_nim",
+          "next_question": "None (Interview Complete)"
+        }
+      ]
+    },
+    "Hindi": {
+      "session_id": "73518264-25d7-4f6d-80dd-506103de4841",
+      "patient_code": "AIIA-202609-00013",
+      "turns": [
+        {
+          "turn": 1,
+          "answer": "मुझे पिछले एक महीने से पेट में गैस और भोजन के बाद भारीपन की समस्या है।",
+          "latency_s": 3.93,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "Do your symptoms get worse after meals, on an empty stomach, or after specific foods?"
+        },
+        {
+          "turn": 2,
+          "answer": "यह समस्या करीब 4 हफ्ते पहले शुरू हुई थी जब मेरा खान-पान अनियमित हुआ।",
+          "latency_s": 7.58,
+          "http_status": 200,
+          "provider": "nvidia_nim",
+          "next_question": "How would you rate the severity of your stomach discomfort on a scale of 1-10?"
+        },
+        {
+          "turn": 3,
+          "answer": "दर्द हल्का है, 10 में से लगभग 4, लेकिन असहजता बनी रहती है।",
+          "latency_s": 12.5,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "Have you noticed any change in bowel habits, like constipation, looseness, or straining?"
+        },
+        {
+          "turn": 4,
+          "answer": "पेट में जलन और भारीपन जैसा महसूस होता है, भूख भी कम लगती है।",
+          "latency_s": 2.49,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "What helps relieve the burning sensation in your stomach?"
+        },
+        {
+          "turn": 5,
+          "answer": "खट्टी डकारें आती हैं, लेकिन उल्टी या बुखार नहीं है।",
+          "latency_s": 15.8,
+          "http_status": 200,
+          "provider": "unknown",
+          "next_question": "None (Interview Complete)"
+        }
+      ]
+    },
+    "Gujarati": {
+      "session_id": "b0154cbc-84d1-4492-b7b1-5c88756c8017",
+      "patient_code": "AIIA-202609-00014",
+      "turns": [
+        {
+          "turn": 1,
+          "answer": "મને છેલ્લા પંદર દિવસથી ગળામાં ખારાશ અને હળવી ઉધરસ રહે છે.",
+          "latency_s": 11.19,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "How many days have you had this cough or congestion?"
+        },
+        {
+          "turn": 2,
+          "answer": "આ તકલીફ 15 દિવસ પહેલાં ઋતુ બદલાવા સાથે શરૂ થઈ હતી.",
+          "latency_s": 18.71,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "Did this start suddenly or gradually?"
+        },
+        {
+          "turn": 3,
+          "answer": "તીવ્રતા 10 માંથી 3 જેટલી છે, સવારે વધારે તકલીફ થાય છે.",
+          "latency_s": 15.49,
+          "http_status": 200,
+          "provider": "nvidia_nim",
+          "next_question": "Did anything specific seem to trigger or bring on this problem?"
+        },
+        {
+          "turn": 4,
+          "answer": "ગળામાં સૂકાપણું અને ખંજવાળ જેવો દુખાવો રહે છે.",
+          "latency_s": 12.67,
+          "http_status": 200,
+          "provider": "groq",
+          "next_question": "What seems to make it feel better, such as rest, warmth, or a specific position?"
+        },
+        {
+          "turn": 5,
+          "answer": "શરીરમાં થોડી સુસ્તી લાગે છે, પરંતુ કોઈ તાવ કે શ્વાસ લેવામાં તકલીફ નથી.",
+          "latency_s": 12.38,
+          "http_status": 200,
+          "provider": "nvidia_nim",
+          "next_question": "None (Interview Complete)"
+        }
+      ]
+    }
+  },
+  "hangs": [
+    "Hindi Turn 3 (12.50s)",
+    "Hindi Turn 5 (15.80s)",
+    "Gujarati Turn 1 (11.19s)",
+    "Gujarati Turn 2 (18.71s)",
+    "Gujarati Turn 3 (15.49s)",
+    "Gujarati Turn 4 (12.67s)",
+    "Gujarati Turn 5 (12.38s)"
+  ],
+  "http_401s": [],
+  "compound_minis": []
+}

@@ -345,10 +345,23 @@ async def trigger_emergency_help(session_id: str):
 
     session.safety_flagged = True
     session.safety_flag_time = datetime.now(timezone.utc)
+    if not session.patient_code:
+        facility = "AIIA"
+        date_str = datetime.now(timezone.utc).strftime("%Y%m")
+        session.patient_code = next_patient_code(f"{facility}-{date_str}")
+
     if not session.safety_detail:
         session.safety_detail = ["Patient requested emergency assistance at kiosk"]
     else:
         session.safety_detail.append("Patient requested emergency assistance at kiosk")
+
+    if not any(a.get("red_flag") for a in session.raw_answers):
+        session.raw_answers.append({
+            "question": "Emergency Button",
+            "answer": "Patient requested emergency assistance at kiosk",
+            "red_flag": True,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        })
 
     db_save_session(session)
     return EmergencyAlertResponse(

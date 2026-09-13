@@ -27,12 +27,13 @@ function MediKioskLogo() {
   );
 }
 
-function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
+export function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
   return (
     <button
       type="button"
       onClick={onHelp}
       className="mk-emergency-btn"
+      id="mk-always-visible-emergency-btn"
       aria-label="Request immediate emergency medical assistance"
       style={{
         backgroundColor: "#DC2626",
@@ -47,6 +48,7 @@ function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
         cursor: "pointer",
         border: "1px solid #B91C1C",
         boxShadow: "0 2px 4px rgba(220, 38, 38, 0.25)",
+        zIndex: 50,
       }}
     >
       <span style={{ fontSize: "15px" }} aria-hidden="true">🚨</span> Need Help Now
@@ -288,15 +290,40 @@ export function PatientFlow() {
   }
 
   async function handleEmergencyAlert() {
+    setLoading(true);
     try {
-      if (sessionId) {
-        await triggerEmergency(sessionId);
+      let currentSessionId = sessionId;
+      if (!currentSessionId) {
+        const patient: Patient = {
+          name: name.trim() || "Emergency Walk-In",
+          age: Number(age) || 0,
+          gender: gender || "other",
+        };
+        const res = await startPatientSession(patient, language, "new");
+        currentSessionId = res.session_id;
+        setSessionId(res.session_id);
+        window.sessionStorage.setItem(SESSION_KEY, res.session_id);
       }
-    } catch {
-      // Prioritize client safety view transition
+      const res = await triggerEmergency(currentSessionId);
+      if (res.patient_code) {
+        setPatientCode(res.patient_code);
+      }
+      try {
+        const s = await getSession(currentSessionId);
+        setSession(s);
+        if (s.patient_code) {
+          setPatientCode(s.patient_code);
+        }
+      } catch {
+        // best effort
+      }
+    } catch (e) {
+      console.error("Emergency trigger error:", e);
+    } finally {
+      setLoading(false);
+      setRedFlag(true);
+      setScreen("safety");
     }
-    setRedFlag(true);
-    setScreen("safety");
   }
 
 
@@ -886,7 +913,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p08-header__spacer" aria-hidden="true" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
 
@@ -998,7 +1025,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <div className="mk-p09-header__spacer" aria-hidden="true" />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
           </div>
         </header>
 
