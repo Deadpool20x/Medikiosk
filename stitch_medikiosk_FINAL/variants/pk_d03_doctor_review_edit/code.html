@@ -1,0 +1,386 @@
+<!DOCTYPE html><html lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>PK-D03 — Doctor Review &amp; Edit | MediKiosk</title>
+<!-- Tailwind CSS v3 CDN with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Menlo', 'Monaco', 'Courier New', 'monospace']
+          },
+          colors: {
+            slate: {
+              50: '#f8fafc',
+              100: '#f1f5f9',
+              200: '#e2e8f0',
+              300: '#cbd5e1',
+              400: '#94a3b8',
+              500: '#64748b',
+              600: '#475569',
+              700: '#334155',
+              800: '#1e293b',
+              900: '#0f172a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+<!-- Custom base tweaks for high visual fidelity -->
+<style data-purpose="base-styling">
+    body {
+      background-color: #f3f4f6;
+      color: #111827;
+      -webkit-font-smoothing: antialiased;
+    }
+    /* Custom subtle scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f5f9;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans pb-16">
+<!-- BEGIN: TopHeader -->
+<header class="bg-white border-b border-gray-200 px-6 py-2 flex items-center justify-between sticky top-0 z-30 shadow-sm" data-purpose="main-header">
+<div class="flex items-center space-x-4">
+<div class="flex items-center space-x-2 text-xs font-semibold tracking-wide text-gray-800">
+<span class="inline-block w-2 h-2 rounded-full bg-blue-600"></span>
+<span class="tracking-tight uppercase font-bold text-gray-900">MEDIKIOSK</span>
+</div>
+<div class="h-4 w-px bg-gray-300"></div>
+<span class="bg-gray-100 text-gray-700 text-xs px-2.5 py-0.5 rounded font-mono font-medium border border-gray-200">
+        DEPT: Panchakarma OPD
+      </span>
+<nav aria-label="Breadcrumb" class="flex items-center space-x-1 ml-4">
+<a class="px-2.5 py-1 text-xs font-medium text-gray-900 bg-gray-100 rounded hover:bg-gray-200 transition-colors" href="#">Queue</a>
+<a class="px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors" href="#">Cases</a>
+<a class="px-2.5 py-1 text-xs font-medium text-gray-500 hover:text-gray-900 transition-colors" href="#">Archive</a>
+</nav>
+</div>
+<div class="flex items-center space-x-5">
+
+<!-- User Avatar Icon -->
+<div class="w-7 h-7 rounded-full bg-gray-900 text-white flex items-center justify-center cursor-pointer hover:bg-gray-800 transition-colors" title="Account profile">
+<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+<path clip-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" fill-rule="evenodd"></path>
+</svg>
+</div>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- BEGIN: SubHeaderNav -->
+<div class="bg-white border-b border-gray-200 px-6 py-2 flex items-center justify-between" data-purpose="sub-header-navigation">
+<div>
+<a class="inline-flex items-center text-xs font-medium text-gray-600 hover:text-gray-900 group" href="#">
+<svg class="w-3.5 h-3.5 mr-1 text-gray-500 group-hover:-translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+        Back to Case (PK-008)
+      </a>
+</div>
+<div class="flex items-center space-x-3">
+<button class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-gray-400 shadow-sm transition-colors" type="button">
+<span class="mr-1 text-gray-500 font-bold">✕</span> Discard Changes
+      </button>
+<button class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-white bg-black border border-black rounded hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-black shadow-sm transition-colors" type="button">
+<svg class="w-3.5 h-3.5 mr-1.5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+        Confirm Case
+      </button>
+</div>
+</div>
+<!-- END: SubHeaderNav -->
+<!-- BEGIN: PatientBanner -->
+<div class="px-6 py-3" data-purpose="patient-summary-banner">
+<div class="bg-white border border-gray-200 rounded p-4 flex flex-wrap items-center gap-y-3 justify-between shadow-xs">
+<div class="flex items-baseline space-x-3">
+<span class="text-[10px] uppercase tracking-wider text-gray-400 font-mono font-semibold block">QUEUE TOKEN</span>
+<span class="text-2xl font-bold font-mono text-gray-900 tracking-tight">PK-008</span>
+</div>
+<div class="h-8 w-px bg-gray-200 hidden sm:block"></div>
+<div>
+<span class="text-[10px] uppercase tracking-wider text-gray-400 font-mono font-semibold block">PATIENT CODE</span>
+<span class="text-xs font-mono font-medium text-gray-800">MK-8038</span>
+</div>
+<div class="h-8 w-px bg-gray-200 hidden sm:block"></div>
+<div>
+<span class="text-[10px] uppercase tracking-wider text-gray-400 font-mono font-semibold block">DEPARTMENT</span>
+<span class="text-xs font-medium text-gray-800">Panchakarma</span>
+</div>
+<div class="h-8 w-px bg-gray-200 hidden sm:block"></div>
+<div>
+<span class="text-[10px] uppercase tracking-wider text-gray-400 font-mono font-semibold block">CHECK-IN TIME</span>
+<span class="text-xs font-mono font-medium text-gray-800">10:12 AM</span>
+</div>
+<div class="h-8 w-px bg-gray-200 hidden sm:block"></div>
+<div>
+<span class="text-[10px] uppercase tracking-wider text-gray-400 font-mono font-semibold block">CASE STATUS</span>
+<span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-600 mt-1" title="Active"></span>
+</div>
+</div>
+</div>
+<!-- END: PatientBanner -->
+<!-- BEGIN: MainContentGrid -->
+<main class="px-6 flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6" data-purpose="content-layout">
+<!-- LEFT COLUMN: Editable Sections (approx 8 cols) -->
+<div class="lg:col-span-8 space-x-0 space-y-6">
+<!-- SECTION 01: Chief Complaint & HPI -->
+<section class="bg-white border border-gray-200 rounded p-5 shadow-xs" data-purpose="hpi-section">
+<!-- Section Header -->
+<div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+<div class="flex items-center space-x-2">
+<span class="inline-flex items-center justify-center w-5 h-5 text-[11px] font-bold bg-black text-white rounded">01</span>
+<h2 class="text-sm font-bold text-gray-900 tracking-tight">Chief Complaint &amp; History of Present Illness (HPI)</h2>
+</div>
+<div class="flex items-center space-x-2">
+<span class="text-[11px] text-gray-500 font-mono">Source: Patient Interview</span>
+<span class="bg-indigo-100 text-indigo-700 text-[10px] font-medium px-2 py-0.5 rounded border border-indigo-200">Editable</span>
+</div>
+</div>
+<div class="space-y-4">
+<!-- Reported Complaint -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">REPORTED COMPLAINT</label>
+<textarea class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors leading-relaxed resize-y" rows="3">Gradual weight gain over 3 years, chronic daytime sluggishness, heaviness in limbs, and mild breathlessness upon exertion (Sthaulya / Medoroga presentation).</textarea>
+</div>
+<!-- Onset and Aggravating Factors 2-column Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">ONSET &amp; DURATION</label>
+<input class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" type="text" value="3 years, progressive exacerbation over past 8 months">
+</div>
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">SEVERITY &amp; AGGRAVATING FACTORS</label>
+<input class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" type="text" value="Aggravated post sedentary afternoon meals; persistent fatigue and lethargy throughout early morning hours.">
+</div>
+</div>
+</div>
+</section>
+<!-- SECTION 02: Medical & Health History -->
+<section class="bg-white border border-gray-200 rounded p-5 shadow-xs" data-purpose="medical-history-section">
+<!-- Section Header -->
+<div class="flex items-center justify-between pb-3 mb-4 border-b border-gray-100">
+<div class="flex items-center space-x-2">
+<span class="inline-flex items-center justify-center w-5 h-5 text-[11px] font-bold bg-black text-white rounded">02</span>
+<h2 class="text-sm font-bold text-gray-900 tracking-tight">Medical &amp; Health History</h2>
+</div>
+<span class="text-[11px] text-gray-500 font-mono">Source: Patient Interview &amp; Uploaded Document</span>
+</div>
+<div class="space-y-4">
+<!-- Past Medical/Surgical -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">PAST MEDICAL / SURGICAL</label>
+<input class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" type="text" value="Borderline dyslipidemia noted 1 year ago, on dietary modification. No prior surgical procedures.">
+</div>
+<!-- Current Medications Sub-card with Extraction Validation -->
+<div class="bg-gray-50/70 border border-gray-200 rounded p-3.5 space-y-3">
+<div class="flex items-center justify-between">
+<div class="flex items-center space-x-2">
+<span class="text-[10px] font-bold font-mono tracking-wider text-gray-700 uppercase">CURRENT MEDICATIONS</span>
+<span class="text-[10px] font-mono text-blue-600">From uploaded document</span>
+</div>
+<span class="bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0.5 rounded border border-emerald-200 font-mono">High confidence</span>
+</div>
+<!-- Medication Item 01 -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-gray-200/80">
+<div>
+<span class="block text-[9px] font-mono tracking-wider text-gray-500 uppercase">ORIGINAL EXTRACTED ITEM 01</span>
+<p class="text-xs font-mono font-semibold text-gray-900 mt-0.5">Tab Triphala Guggulu 1 tab BD (morning/night)</p>
+<span class="text-[10px] text-gray-400 font-mono">Detected in: Previous_Prescription_Oct2023.pdf</span>
+</div>
+<div>
+<label class="block text-[9px] font-mono tracking-wider text-blue-600 uppercase mb-0.5">DOCTOR VALIDATED ENTRY</label>
+<input class="w-full text-xs text-gray-800 bg-white border border-gray-200 rounded p-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono" type="text" value="Tab Triphala Guggulu 1 tab BD (morning/night)">
+</div>
+</div>
+<!-- Medication Item 02 -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-3 pt-3 border-t border-gray-200/80">
+<div>
+<span class="block text-[9px] font-mono tracking-wider text-gray-500 uppercase">ORIGINAL EXTRACTED ITEM 02</span>
+<p class="text-xs font-mono font-semibold text-gray-900 mt-0.5">Dietary advice: reduce snigdha ahara</p>
+<span class="text-[10px] text-gray-400 font-mono">Detected in: Previous_Prescription_Oct2023.pdf</span>
+</div>
+<div>
+<label class="block text-[9px] font-mono tracking-wider text-blue-600 uppercase mb-0.5">DOCTOR VALIDATED ENTRY</label>
+<input class="w-full text-xs text-gray-800 bg-white border border-gray-200 rounded p-1.5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono" type="text" value="Dietary advice: reduce snigdha ahara — Doctor noted">
+</div>
+</div>
+</div>
+<!-- Allergies and Family History 2-column Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">KNOWN ALLERGIES</label>
+<input class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" type="text" value="No known drug allergies (NKDA)">
+</div>
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">FAMILY HISTORY</label>
+<input class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" type="text" value="Paternal history of metabolic disorders and obesity; no family cardiac history.">
+</div>
+</div>
+<!-- Personal and Occupational History -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">PERSONAL &amp; OCCUPATIONAL HISTORY</label>
+<input class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors" type="text" value="Desk job (IT consultant), sedentary routine (~8-9 hrs sitting), irregular sleep schedule (~6 hrs).">
+</div>
+</div>
+</section>
+<!-- SECTION 03: Patient-Reported Ayurvedic Information -->
+<section class="bg-white border border-gray-200 rounded p-5 shadow-xs mb-6" data-purpose="ayurvedic-info-section">
+<!-- Section Header -->
+<div class="flex items-center justify-between pb-3 mb-2 border-b border-gray-100">
+<div class="flex items-center space-x-2">
+<span class="inline-flex items-center justify-center w-5 h-5 text-[11px] font-bold bg-black text-white rounded">03</span>
+<h2 class="text-sm font-bold text-gray-900 tracking-tight">Patient-Reported Ayurvedic Information</h2>
+</div>
+<span class="text-[11px] text-gray-500 font-mono">Patient-Reported • Uninterpreted</span>
+</div>
+<p class="text-[11px] text-gray-500 italic mb-4">Patient-reported characteristics only; no clinical diagnosis or dosha classification inferred.</p>
+<div class="space-y-4">
+<!-- Prakriti -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">PRAKRITI (REPORTED CHARACTERISTICS)</label>
+<textarea class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors leading-relaxed resize-y" rows="2">Heaviness tendency, cold sensitivity in extremities, moderate steady appetite with slow digestion.</textarea>
+</div>
+<!-- Agni -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">AGNI (REPORTED DIGESTION)</label>
+<textarea class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors leading-relaxed resize-y" rows="2">Manda Agni presentation — slow post-meal metabolic breakdown, heaviness lasting 3-4 hours after food.</textarea>
+</div>
+<!-- Koshtha -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">KOSHTHA (REPORTED BOWEL HABIT)</label>
+<textarea class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors leading-relaxed resize-y" rows="2">Mildly sluggish bowel movement, once daily or alternate days, tendency towards irregular evacuation.</textarea>
+</div>
+<!-- Nidana -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">NIDANA (DIETARY / LIFESTYLE FACTORS)</label>
+<textarea class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors leading-relaxed resize-y" rows="2">Excessive intake of oily and sweet food items, sedentary routine, habitual daytime sleeping (divasvapna).</textarea>
+</div>
+<!-- Ahara - Vihara Habits -->
+<div>
+<label class="block text-[10px] font-bold font-mono tracking-wider text-gray-500 uppercase mb-1">AHARA – VIHARA HABITS</label>
+<textarea class="w-full text-xs text-gray-800 bg-gray-50 hover:bg-white focus:bg-white border border-gray-200 rounded p-2 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-colors leading-relaxed resize-y" rows="2">Predominantly heavy vegetarian diet; minimal regular physical exertion.</textarea>
+</div>
+</div>
+</section>
+</div>
+<!-- RIGHT COLUMN: Verification & Preview (approx 4 cols) -->
+<div class="lg:col-span-4 space-y-6">
+<!-- Extracted Items Verification Box -->
+<section class="bg-white border border-gray-200 rounded p-5 shadow-xs" data-purpose="verification-column">
+<h3 class="text-[11px] font-bold font-mono tracking-wider text-gray-700 uppercase mb-4">EXTRACTED ITEMS VERIFICATION</h3>
+<!-- Verification List -->
+<div class="space-y-4">
+<!-- Item 1 -->
+<div class="border border-gray-200 rounded p-3 bg-white">
+<div class="flex items-start justify-between">
+<div class="pr-2">
+<p class="text-xs font-bold font-mono text-gray-900">Tab Triphala Guggulu 1 tab BD</p>
+<p class="text-[10px] text-gray-500 font-mono mt-0.5">From uploaded document • High confidence</p>
+</div>
+<span class="inline-flex items-center text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded whitespace-nowrap">
+<svg class="w-3 h-3 mr-1 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+                Doctor Verified
+              </span>
+</div>
+<div class="mt-2.5 pt-2 border-t border-gray-100 text-right">
+<button class="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline transition-colors" type="button">Edit</button>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="border border-gray-200 rounded p-3 bg-white">
+<div class="flex items-start justify-between">
+<div class="pr-2">
+<p class="text-xs font-bold font-mono text-gray-900">Lipid Profile routine requisition note</p>
+<p class="text-[10px] text-gray-500 font-mono mt-0.5">From uploaded document • High confidence</p>
+</div>
+<span class="inline-flex items-center text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded whitespace-nowrap">
+<svg class="w-3 h-3 mr-1 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></path>
+</svg>
+                Doctor Verified
+              </span>
+</div>
+<div class="mt-2.5 pt-2 border-t border-gray-100 text-right">
+<button class="text-[11px] font-medium text-gray-500 hover:text-gray-900 underline transition-colors" type="button">Edit</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Document Preview Box -->
+<section class="bg-white border border-gray-200 rounded p-5 shadow-xs" data-purpose="document-preview-section">
+<div class="flex items-center justify-between mb-3">
+<h3 class="text-[11px] font-bold font-mono tracking-wider text-gray-700 uppercase">DOCUMENT PREVIEW</h3>
+<span class="bg-emerald-50 text-emerald-700 text-[10px] font-medium px-2 py-0.5 rounded border border-emerald-200 font-mono">High confidence</span>
+</div>
+<!-- Styled prescription / lab report preview mockup matching original aesthetics -->
+<div class="relative border border-gray-300 rounded overflow-hidden shadow-inner bg-stone-100 aspect-[4/3] flex items-center justify-center p-3">
+<div class="w-full h-full bg-white border border-gray-200 shadow-sm p-4 text-[10px] font-serif text-gray-700 flex flex-col justify-between select-none transform rotate-[0.5deg]">
+<div>
+<div class="text-center pb-2 border-b border-gray-300">
+<p class="font-bold text-xs uppercase tracking-wider text-gray-800">CLINICAL HEALTH &amp; LAB SERVICES</p>
+<p class="text-[9px] text-gray-500">OPD Consultation &amp; Assessment Summary</p>
+</div>
+<div class="mt-2 space-y-1 text-[9px] font-mono text-gray-600">
+<p class="">Pt: MK-8038 | Age: 42Y | Gender: M</p>
+<p class="">Date: 24/10/2023</p>
+</div>
+<div class="mt-3 space-y-1.5 font-mono text-[9.5px]">
+<p class="font-bold text-gray-800">Rx / Advised:</p>
+<p class="">1. Tab Triphala Guggulu 1 tab BD (morning/night)</p>
+<p class="">2. Diet: reduce snigdha / heavy items</p>
+<p class="">3. Requisition: Routine Lipid Profile screening</p>
+</div>
+</div>
+<div class="pt-2 border-t border-gray-200 flex justify-between items-end">
+<span class="text-[8px] font-mono text-gray-400">Verified digital copy</span>
+<div class="text-right">
+<span class="font-serif italic text-[11px] text-blue-900 block leading-tight">Dr. Authorized</span>
+<span class="text-[8px] font-mono text-gray-400">Reg: #492849</span>
+</div>
+</div>
+</div>
+</div>
+</section>
+</div>
+</main>
+<!-- END: MainContentGrid -->
+<!-- BEGIN: BottomStickyWorkflowBar -->
+<footer class="fixed bottom-0 inset-x-0 bg-white border-t border-gray-300 px-6 py-2.5 z-40 shadow-lg" data-purpose="workflow-bar">
+<div class="flex flex-col sm:flex-row items-center justify-between gap-2 max-w-full">
+<div class="text-xs font-mono font-medium text-gray-800">
+<span class="font-bold">PK-008</span> <span class="text-gray-400">|</span> Patient Code: <span class="font-bold">MK-8038</span> <span class="text-gray-400">|</span> <span class="text-blue-600 font-semibold">Review &amp; Edit</span>
+</div>
+<div class="flex items-center space-x-2.5">
+<button class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 focus:outline-none transition-colors" type="button">
+          Discard Changes
+        </button>
+<button class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 focus:outline-none transition-colors" type="button">
+          Save Changes
+        </button>
+<button class="inline-flex items-center px-4 py-1.5 text-xs font-medium text-white bg-black border border-black rounded hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-black shadow-sm transition-colors" type="button"><svg class="w-3.5 h-3.5 mr-1.5 text-white" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M5 13l4 4L19 7" stroke-linecap="round" stroke-linejoin="round"></path></svg> Confirm Case</button>
+</div>
+</div>
+</footer>
+<!-- END: BottomStickyWorkflowBar -->
+
+
+</body></html>

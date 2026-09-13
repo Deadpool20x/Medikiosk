@@ -2,24 +2,213 @@
 .env
 .env.local
 .env.*.local
+.env.development
+.env.production
+.env.test
+*.env
 
-# Ruflo / Claude runtime
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.*.swp
+.*.swo
+.project
+.cproject
+.settings/
+*.sublime-workspace
+*.sublime-project
+*.code-workspace
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.temp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+/lib/
+/lib64/
+!frontend/lib/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+*.manifest
+*.spec
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache/
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+pytest-debug/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Python Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# Python Database Files
+*.db
+*.sqlite
+*.sqlite3
+*.sql
+
+# Node.js & Frontend
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+yarn.lock
+pnpm-lock.yaml
+
+# Next.js
+.next/
+out/
+build/
+.vercel/
+.nuxt/
+.nuxtrc/
+
+# TypeScript
+*.tsbuildinfo
+*.tsc
+dist/
+build/
+
+# JavaScript Build Outputs
+*.js.map
+*.css.map
+
+# Logs
+*.log
+logs/
+*.log.*
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS Specific - Windows/Unix/Mac
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+*.cover
+htmlcov/
+.tox/
+.nose2/
+.coverage
+coverage.json
+coverage.xml
+coverage.lcov
+
+# Temporary Files
+*.swp
+*.swo
+*.tmp
+*.temp
+
+# Backup / Broken Source Artifacts
+*.bak
+*.bak.[0-9]*
+*.bak[0-9]*
+*.backup
+*.backup.[0-9]*
+*.broken
+*.orig
+*.old
+
+# Personal & Development Only
+.agent/
+.agents/
+.claude/
+.claude-flow/
+.opencode/
+.mcp.json
+.hermes/
+.swarm/
+.dogfood/
+.idea/
+stitch_medikiosk_clinical_ui_ux_system/
+stitch_medikiosk_clinical_ui_ux_system2/
+
+
+# Ruflo/Claude Runtime
 .claude-flow/data/
 .claude-flow/logs/
 .claude-flow/sessions/
 
-# Python & Backend
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.venv/
+# Generated & Output Files
+graphify-out/
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Documentation & Design Files (Personal/Outdated)
+*.pdf
+*.md.bak
+test.png
+*.dump
+
+# Test Artifacts & QA outputs
+test-artifacts/
+stitch_medikiosk_FINAL/p0_shots/
+stitch_medikiosk_FINAL/p0_fix_shots/
+live_validation_results.json
+scratch_audit_transcripts.json
+*.jsonl
+scratch/
+
+# Project Specific
+frontend/out/
 backend/data/*.db
 
-# Node & Frontend
-node_modules/
-.next/
-out/
-build/
-dist/
-*.tsbuildinfo
+# Optional - Uncomment if needed
+# *.log
+# pids/
+# *.pid
+# *.seed
+# *.pid.lock
+# *.dSYM/
+# *.su
+# *.swo
+# *.swp

@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PK-D01 — Panchakarma Department Queue</title>
+<!-- Tailwind CSS v3 with forms and container queries -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+          colors: {
+            app: {
+              bg: '#FAF7F5',
+              surface: '#FFFFFF',
+              card: '#F6F3F1',
+              pill: '#EFEBE7',
+              text: '#171717',
+              muted: '#737373',
+              subtle: '#8F8A85',
+              border: '#ECE7E2',
+              teal: '#0D9488',
+            }
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-typography">
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background-color: #FAF7F5;
+      color: #171717;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-app-bg text-app-text flex flex-col">
+<!-- BEGIN: TopNavigation -->
+<header class="w-full px-6 py-4 flex items-center justify-between" data-purpose="main-header">
+<div class="flex items-center space-x-3">
+<!-- Brand & Dept indicator -->
+<div class="flex items-center space-x-2 mr-1">
+<span class="w-2 h-2 rounded-full bg-indigo-600 inline-block"></span>
+<span class="text-xs font-semibold tracking-wider text-neutral-800 uppercase">MEDIKIOSK</span>
+</div>
+<!-- Department Badge -->
+<div class="bg-neutral-200/60 text-neutral-700 text-[11px] font-medium px-2.5 py-1 rounded">
+        DEPT: Panchakarma OPD
+      </div>
+<!-- Navigation Tabs -->
+<nav class="flex items-center space-x-1 ml-1" data-purpose="sub-nav">
+<a aria-current="page" class="bg-neutral-200/80 text-neutral-900 font-medium text-xs px-3 py-1 rounded transition-colors" href="#queue">Queue</a>
+<a class="text-neutral-600 hover:text-neutral-900 font-medium text-xs px-3 py-1 rounded transition-colors" href="#cases">Cases</a>
+<a class="text-neutral-600 hover:text-neutral-900 font-medium text-xs px-3 py-1 rounded transition-colors" href="#archive">Archive</a>
+</nav>
+</div>
+<!-- User Profile Icon -->
+<div class="flex items-center">
+<div class="w-8 h-8 rounded-full bg-black flex items-center justify-center text-white cursor-pointer hover:opacity-90 transition-opacity" data-purpose="user-avatar" title="Doctor Profile">
+<svg class="w-4 h-4" fill="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" fill-rule="evenodd"></path>
+</svg>
+</div>
+</div>
+</header>
+<!-- END: TopNavigation -->
+<!-- BEGIN: MainContent -->
+<main class="flex-1 w-full max-w-[1400px] mx-auto px-6 pt-1 pb-16">
+<!-- Title Section -->
+<section class="bg-white/95 rounded-xl px-8 py-7 shadow-[0_1px_3px_rgba(0,0,0,0.02)] mb-4" data-purpose="title-card">
+<h1 class="text-3xl font-semibold tracking-tight text-neutral-900">Panchakarma</h1>
+</section>
+<!-- Queue Table Container -->
+<section class="bg-white rounded-xl shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden" data-purpose="queue-table-wrapper">
+<!-- Table Header -->
+<div class="grid grid-cols-12 px-8 py-3.5 bg-neutral-100/70 text-[11px] font-semibold uppercase tracking-wider text-neutral-500 select-none" data-purpose="column-headers">
+<div class="col-span-3">QUEUE TOKEN</div>
+<div class="col-span-2">PATIENT CODE</div>
+<div class="col-span-3">STATUS</div>
+<div class="col-span-2">CHECK-IN TIME</div>
+<div class="col-span-2 text-right pr-2">ACTION</div>
+</div>
+<!-- Queue List Rows -->
+<div class="divide-y divide-transparent" data-purpose="queue-rows-container">
+<!-- Row 1: PK-008 (Active) -->
+<div class="grid grid-cols-12 items-center px-8 py-4 hover:bg-neutral-50/50 transition-colors" data-purpose="queue-row">
+<!-- Queue Token with primary teal accent indicator -->
+<div class="col-span-3 flex items-center space-x-2.5">
+<span class="w-1 h-5 rounded-full bg-emerald-600 inline-block"></span>
+<span class="font-semibold text-base text-neutral-900 tracking-tight">PK-008</span>
+</div>
+<!-- Patient Code -->
+<div class="col-span-2">
+<span class="inline-block px-2.5 py-1 text-xs text-neutral-600 bg-neutral-100 rounded font-medium">
+              MK-8038
+            </span>
+</div>
+<!-- Status -->
+<div class="col-span-3">
+<span class="inline-flex items-center text-xs font-normal text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-neutral-400 mr-1.5"></span>
+              Waiting
+            </span>
+</div>
+<!-- Check-in Time -->
+<div class="col-span-2 text-xs font-medium text-neutral-800">
+            10:12 AM
+          </div>
+<!-- Action Button: Primary Solid Black -->
+<div class="col-span-2 flex justify-end">
+<button class="inline-flex items-center justify-center space-x-1.5 bg-black hover:bg-neutral-800 text-white text-xs font-medium px-4 py-2 rounded-lg transition-colors shadow-sm" data-purpose="open-case-button" type="button">
+<span>Open Case</span>
+<svg class="h-3.5 w-3.5 ml-0.5" fill="currentColor" viewbox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M10.293 3.293a1 1 0 011.414 0l6 6a1 1 0 010 1.414l-6 6a1 1 0 01-1.414-1.414L14.586 11H3a1 1 0 110-2h11.586l-4.293-4.293a1 1 0 010-1.414z" fill-rule="evenodd"></path>
+</svg>
+</button>
+</div>
+</div>
+<!-- Row 2: PK-009 -->
+<div class="grid grid-cols-12 items-center px-8 py-4 hover:bg-neutral-50/50 transition-colors" data-purpose="queue-row">
+<!-- Queue Token with muted indicator -->
+<div class="col-span-3 flex items-center space-x-2.5">
+<span class="w-1 h-5 rounded-full bg-neutral-300 inline-block"></span>
+<span class="font-semibold text-base text-neutral-900 tracking-tight">PK-009</span>
+</div>
+<!-- Patient Code -->
+<div class="col-span-2">
+<span class="inline-block px-2.5 py-1 text-xs text-neutral-600 bg-neutral-100 rounded font-medium">
+              MK-8044
+            </span>
+</div>
+<!-- Status -->
+<div class="col-span-3">
+<span class="inline-flex items-center text-xs font-normal text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-neutral-400 mr-1.5"></span>
+              Waiting
+            </span>
+</div>
+<!-- Check-in Time -->
+<div class="col-span-2 text-xs font-medium text-neutral-800">
+            10:19 AM
+          </div>
+<!-- Action Button: Secondary Subtle Neutral -->
+<div class="col-span-2 flex justify-end">
+<button class="inline-flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-medium px-4 py-2 rounded-lg transition-colors" data-purpose="open-case-button" type="button">
+              Open Case
+            </button>
+</div>
+</div>
+<!-- Row 3: PK-010 -->
+<div class="grid grid-cols-12 items-center px-8 py-4 hover:bg-neutral-50/50 transition-colors" data-purpose="queue-row">
+<!-- Queue Token with muted indicator -->
+<div class="col-span-3 flex items-center space-x-2.5">
+<span class="w-1 h-5 rounded-full bg-neutral-300 inline-block"></span>
+<span class="font-semibold text-base text-neutral-900 tracking-tight">PK-010</span>
+</div>
+<!-- Patient Code -->
+<div class="col-span-2">
+<span class="inline-block px-2.5 py-1 text-xs text-neutral-600 bg-neutral-100 rounded font-medium">
+              MK-8047
+            </span>
+</div>
+<!-- Status -->
+<div class="col-span-3">
+<span class="inline-flex items-center text-xs font-normal text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-neutral-400 mr-1.5"></span>
+              Waiting
+            </span>
+</div>
+<!-- Check-in Time -->
+<div class="col-span-2 text-xs font-medium text-neutral-800">
+            10:25 AM
+          </div>
+<!-- Action Button: Secondary Subtle Neutral -->
+<div class="col-span-2 flex justify-end">
+<button class="inline-flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-medium px-4 py-2 rounded-lg transition-colors" data-purpose="open-case-button" type="button">
+              Open Case
+            </button>
+</div>
+</div>
+<!-- Row 4: PK-011 -->
+<div class="grid grid-cols-12 items-center px-8 py-4 hover:bg-neutral-50/50 transition-colors" data-purpose="queue-row">
+<!-- Queue Token with muted indicator -->
+<div class="col-span-3 flex items-center space-x-2.5">
+<span class="w-1 h-5 rounded-full bg-neutral-300 inline-block"></span>
+<span class="font-semibold text-base text-neutral-900 tracking-tight">PK-011</span>
+</div>
+<!-- Patient Code -->
+<div class="col-span-2">
+<span class="inline-block px-2.5 py-1 text-xs text-neutral-600 bg-neutral-100 rounded font-medium">
+              MK-8052
+            </span>
+</div>
+<!-- Status -->
+<div class="col-span-3">
+<span class="inline-flex items-center text-xs font-normal text-neutral-600 bg-neutral-100 px-2.5 py-1 rounded-full">
+<span class="w-1.5 h-1.5 rounded-full bg-neutral-400 mr-1.5"></span>
+              Waiting
+            </span>
+</div>
+<!-- Check-in Time -->
+<div class="col-span-2 text-xs font-medium text-neutral-800">
+            10:33 AM
+          </div>
+<!-- Action Button: Secondary Subtle Neutral -->
+<div class="col-span-2 flex justify-end">
+<button class="inline-flex items-center justify-center bg-neutral-100 hover:bg-neutral-200 text-neutral-700 text-xs font-medium px-4 py-2 rounded-lg transition-colors" data-purpose="open-case-button" type="button">
+              Open Case
+            </button>
+</div>
+</div>
+</div>
+</section>
+</main>
+<!-- END: MainContent -->
+</body></html>

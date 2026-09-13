@@ -1,0 +1,299 @@
+<!DOCTYPE html><html lang="en" style=""><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>MediKiosk — Patient Case KY-014 (MK-8042)</title>
+<!-- Tailwind CSS v3 -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#fbf7f6',
+              card: '#ffffff',
+              border: '#e5e2e1',
+              borderDark: '#d1cdcc',
+              primary: '#0d0d0d',
+              accent: '#10b981',
+              muted: '#6b7280',
+              pill: '#f1eceb',
+              source: '#ede7e5',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-layout">
+    body {
+      background-color: #fbf7f6;
+      color: #1a1a1a;
+      -webkit-font-smoothing: antialiased;
+    }
+    .badge-source {
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background-color: #f0ebe9;
+      color: #5c5553;
+      border: 1px solid #e2dcda;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col font-sans pb-24 text-sm selection:bg-neutral-800 selection:text-white">
+<!-- BEGIN: TopNavigation -->
+<header class="w-full bg-[#fbf7f6] border-b border-[#ece7e6] sticky top-0 z-30 px-6 py-3" data-purpose="top-navigation">
+<div class="max-w-7xl mx-auto flex items-center justify-between">
+<!-- Brand & Dept Context -->
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-2">
+<span class="w-2.5 h-2.5 rounded-full bg-neutral-900 inline-block"></span>
+<span class="font-bold tracking-tight text-neutral-900 text-sm uppercase">MEDIKIOSK</span>
+</div>
+<span class="text-xs font-mono font-medium px-2.5 py-1 bg-[#ede8e6] text-neutral-700 rounded-md border border-[#dfd9d7]">
+          DEPT: Kayachikitsa OPD
+        </span>
+</div>
+<!-- Navigation Tabs matching D01 style -->
+<nav aria-label="Main Navigation" class="flex items-center bg-[#ede8e6] p-1 rounded-lg border border-[#e2dcda]">
+<a class="px-4 py-1.5 text-xs font-medium text-neutral-600 hover:text-neutral-900 transition-colors" href="#">Queue</a>
+<a class="px-4 py-1.5 text-xs font-semibold bg-white text-neutral-900 rounded shadow-sm" href="#">Cases</a>
+<a class="px-4 py-1.5 text-xs font-medium text-neutral-600 hover:text-neutral-900 transition-colors" href="#">Archive</a>
+</nav>
+<!-- User Profile Icon matching D01 -->
+<div class="flex items-center">
+<button aria-label="Staff Profile" class="w-8 h-8 rounded-full bg-neutral-900 text-white flex items-center justify-center hover:opacity-90 transition-opacity" type="button">
+<svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+<path clip-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" fill-rule="evenodd"></path>
+</svg>
+</button>
+</div>
+</div>
+</header>
+<!-- END: TopNavigation -->
+<!-- BEGIN: MainContent -->
+<main class="max-w-7xl w-full mx-auto px-6 pt-5 pb-12 flex-1" data-purpose="case-detail-container">
+<!-- Breadcrumb Link Back -->
+<div class="mb-4">
+<a class="inline-flex items-center gap-1.5 text-xs font-medium text-neutral-600 hover:text-neutral-950 transition-colors" href="#">
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+        Back to Queue
+      </a>
+</div>
+<!-- BEGIN: PatientCaseHeaderCard -->
+<section class="bg-white rounded-xl border border-[#e5e2e1] p-5 shadow-sm mb-6" data-purpose="patient-header">
+<div class="flex flex-wrap items-center justify-between gap-4">
+<!-- Key Identifiers -->
+<div class="flex items-center gap-5">
+<div class="border-l-4 border-emerald-500 pl-3">
+<div class="text-[11px] font-mono text-neutral-500 uppercase tracking-wider">Queue Token</div>
+<div class="text-2xl font-bold font-mono text-neutral-900">KY-014</div>
+</div>
+<div class="h-10 w-[1px] bg-neutral-200"></div>
+<div>
+<div class="text-[11px] font-mono text-neutral-500 uppercase tracking-wider">Patient Code</div>
+<div class="text-base font-semibold font-mono text-neutral-800">MK-8042</div>
+</div>
+<div class="h-10 w-[1px] bg-neutral-200"></div>
+<div>
+<div class="text-[11px] font-mono text-neutral-500 uppercase tracking-wider">Department</div>
+<div class="text-sm font-medium text-neutral-800">Kayachikitsa (General Medicine)</div>
+</div>
+<div class="h-10 w-[1px] bg-neutral-200 hidden sm:block"></div>
+<div class="hidden sm:block">
+<div class="text-[11px] font-mono text-neutral-500 uppercase tracking-wider">Check-in Time</div>
+<div class="text-sm font-mono text-neutral-800">10:18 AM</div>
+</div>
+</div>
+<!-- Status and Quick Action Buttons -->
+<div class="flex items-center gap-3"><span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-800 border border-amber-200/70">
+<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+            Awaiting Doctor Review
+          </span>
+<button class="px-3.5 py-2 text-xs font-medium bg-neutral-900 text-white hover:bg-neutral-800 rounded-lg transition-colors flex items-center gap-1.5" type="button">
+            Review / Edit Case
+          </button></div>
+</div>
+</section>
+<!-- END: PatientCaseHeaderCard -->
+<!-- Grid Container for Case Sections -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+<!-- Left Column (Chief Complaint, Medical History, Ayurvedic Intake) -->
+<div class="lg:col-span-8 space-y-6">
+<!-- BEGIN: SectionChiefComplaint -->
+<section class="bg-white rounded-xl border border-[#e5e2e1] p-5 shadow-sm" data-purpose="chief-complaint-section">
+<div class="flex items-center justify-between pb-3.5 mb-4 border-b border-neutral-100">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-4 rounded bg-neutral-900"></span>
+<h2 class="text-sm font-bold uppercase tracking-wide text-neutral-900">1. Chief Complaint &amp; History of Present Illness (HPI)</h2>
+</div>
+<span class="badge-source">Source: Patient Interview</span>
+</div>
+<div class="space-y-4">
+<div class="bg-[#faf8f7] p-3.5 rounded-lg border border-[#eee9e7]">
+<div class="text-xs font-mono uppercase text-neutral-500 mb-1">Reported Complaint</div>
+<p class="text-neutral-900 font-medium leading-relaxed">
+                Chronic lower back stiffness and bilateral knee joint pain (Sandhivata presentation), exacerbated during cold weather and early mornings for past 6 months.
+              </p>
+</div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+<div class="border border-neutral-200 rounded-lg p-3">
+<span class="text-xs font-mono uppercase text-neutral-500 block mb-1">Onset &amp; Duration</span>
+<span class="text-neutral-900 font-medium">6 months, gradual progression</span>
+</div>
+<div class="border border-neutral-200 rounded-lg p-3">
+<span class="text-xs font-mono uppercase text-neutral-500 block mb-1">Severity &amp; Aggravating Factors</span>
+<span class="text-neutral-900 font-medium">Increases after prolonged sitting or physical exertion; morning stiffness lasting ~30 minutes</span>
+</div>
+</div>
+</div>
+</section>
+<!-- END: SectionChiefComplaint -->
+<!-- BEGIN: SectionMedicalHistory -->
+<section class="bg-white rounded-xl border border-[#e5e2e1] p-5 shadow-sm" data-purpose="medical-history-section">
+<div class="flex items-center justify-between pb-3.5 mb-4 border-b border-neutral-100">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-4 rounded bg-neutral-900"></span>
+<h2 class="text-sm font-bold uppercase tracking-wide text-neutral-900">2. Medical &amp; Health History</h2>
+</div>
+<span class="badge-source">Source: Patient Interview</span>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+<div class="p-3 rounded-lg border border-neutral-200 bg-white">
+<span class="font-mono uppercase text-neutral-500 block mb-1">Past Medical / Surgical</span>
+<p class="text-neutral-900 font-medium leading-relaxed">Mild hypertension diagnosed 2 years ago, controlled. No prior surgical procedures.</p>
+</div>
+<div class="p-3 rounded-lg border border-neutral-200 bg-white">
+<div class="flex items-center justify-between mb-1">
+<span class="font-mono uppercase text-neutral-500">Current Medications</span>
+<span class="badge-source text-[10px] py-0 px-1.5">Source: From uploaded document</span>
+</div>
+<p class="text-neutral-900 font-medium leading-relaxed">Tab Amlodipine 5mg OD (morning)</p>
+</div>
+<div class="p-3 rounded-lg border border-neutral-200 bg-white">
+<span class="font-mono uppercase text-neutral-500 block mb-1">Known Allergies</span>
+<p class="text-neutral-900 font-medium">No known drug allergies (NKDA)</p>
+</div>
+<div class="p-3 rounded-lg border border-neutral-200 bg-white">
+<span class="font-mono uppercase text-neutral-500 block mb-1">Family History</span>
+<p class="text-neutral-900 font-medium leading-relaxed">Maternal history of osteoarthritis; no known family history of diabetes or cardiac conditions.</p>
+</div>
+<div class="p-3 rounded-lg border border-neutral-200 bg-white md:col-span-2">
+<span class="font-mono uppercase text-neutral-500 block mb-1">Personal &amp; Occupational History</span>
+<p class="text-neutral-900 font-medium leading-relaxed">Non-smoker, sedentary desk occupation, regular sleep schedule (~6-7 hrs).</p>
+</div>
+</div>
+</section>
+<!-- END: SectionMedicalHistory -->
+<!-- BEGIN: SectionAyurvedicBaseline -->
+<section class="bg-white rounded-xl border border-[#e5e2e1] p-5 shadow-sm" data-purpose="ayurvedic-assessment-section">
+<div class="flex items-center justify-between pb-3.5 mb-2 border-b border-neutral-100">
+<div class="flex items-center gap-2">
+<span class="w-1.5 h-4 rounded bg-neutral-900"></span>
+<h2 class="text-sm font-bold uppercase tracking-wide text-neutral-900">3. Ayurvedic Baseline Assessment</h2>
+</div>
+<span class="badge-source">Recorded Baseline • Uninterpreted</span>
+</div>
+<p class="text-xs text-neutral-500 italic mb-4">Patient-reported characteristics only; no clinical diagnosis or dosha classification inferred.</p>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-3"><div class="border border-neutral-200 rounded-lg p-3 bg-[#faf9f8]">
+<span class="text-[11px] font-mono uppercase text-neutral-500 block">Prakriti (Reported Characteristics)</span>
+<p class="text-xs text-neutral-700 mt-2 leading-relaxed">Dry skin tendency, cold sensitivity reported by patient; irregular appetite patterns.</p>
+</div>
+<div class="border border-neutral-200 rounded-lg p-3 bg-[#faf9f8]">
+<span class="text-[11px] font-mono uppercase text-neutral-500 block">Agni (Reported Digestion)</span>
+<p class="text-xs text-neutral-700 mt-2 leading-relaxed">Patient reports sluggish digestion after heavy meals, post-meal heaviness occasionally noted.</p>
+</div>
+<div class="border border-neutral-200 rounded-lg p-3 bg-[#faf9f8]">
+<span class="text-[11px] font-mono uppercase text-neutral-500 block">Koshtha (Reported Bowel Habit)</span>
+<p class="text-xs text-neutral-700 mt-2 leading-relaxed">Patient reports regular bowel movements with occasional mild dryness/constipation.</p>
+</div></div>
+<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3"><div class="border border-neutral-200 rounded-lg p-3">
+<span class="text-[11px] font-mono uppercase text-neutral-500 block">Nidana (Dietary / Lifestyle Factors)</span>
+<p class="text-xs font-medium text-neutral-800 mt-1">Frequent intake of cold beverages and dry food, irregular meal timings, prolonged air-conditioned work environment.</p>
+</div>
+<div class="border border-neutral-200 rounded-lg p-3">
+<span class="text-[11px] font-mono uppercase text-neutral-500 block">Ahara - Vihara Habits</span>
+<p class="text-xs font-medium text-neutral-800 mt-1">Vegetarian diet; limited regular physical exercise.</p>
+</div></div>
+</section>
+<!-- END: SectionAyurvedicBaseline -->
+</div>
+<!-- Right Column (Document Extraction & Metadata Provenance) -->
+<div class="lg:col-span-4 space-y-6">
+<!-- BEGIN: SectionUploadedDocuments -->
+<section class="bg-white rounded-xl border border-[#e5e2e1] p-5 shadow-sm" data-purpose="document-extraction-section">
+<div class="flex items-center justify-between pb-3.5 mb-4 border-b border-neutral-100">
+<h2 class="text-sm font-bold uppercase tracking-wide text-neutral-900">4. Uploaded Documents</h2>
+<span class="text-xs font-mono text-neutral-500">1 Document</span>
+</div>
+<!-- Document Card -->
+<div class="border border-neutral-200 rounded-lg p-4 bg-[#fdfcfb]">
+<div class="flex items-start justify-between gap-2 mb-3">
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-600">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+<div>
+<div class="text-xs font-semibold text-neutral-900 truncate max-w-[170px]" title="Previous_Prescription_Oct2024.pdf">
+                    Previous_Prescription_Oct2024.pdf
+                  </div>
+<div class="text-[11px] text-neutral-500">Uploaded via Kiosk Camera</div>
+</div>
+</div>
+<span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">High confidence</span>
+</div>
+<div class="text-xs space-y-2 pt-2 border-t border-neutral-200/80">
+<div>
+<span class="text-neutral-500 font-mono text-[11px] block">Extracted Content:</span>
+<p class="text-neutral-800 font-medium mt-0.5">
+                  • Tab Amlodipine 5mg OD<br>
+                  • Analgesic gel for knee joint application PRN
+                </p>
+</div>
+<div class="text-[11px] text-neutral-500 flex items-center justify-between pt-1">
+<span class="">Status: Reviewable by doctor</span>
+<button class="text-neutral-900 underline font-medium hover:text-neutral-700" type="button">View Scan</button>
+</div>
+</div>
+</div>
+</section>
+<!-- END: SectionUploadedDocuments -->
+<!-- BEGIN: SectionProvenanceMetadata -->
+
+<!-- END: SectionProvenanceMetadata -->
+</div>
+</div>
+</main>
+<!-- END: MainContent -->
+<!-- BEGIN: BottomActionBar -->
+<footer class="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-sm border-t border-[#e2dcda] py-3.5 px-6 z-20 shadow-md" data-purpose="case-action-bar">
+<div class="max-w-7xl mx-auto flex items-center justify-between"><div class="flex items-center gap-3">
+<span class="font-mono font-bold text-neutral-900">Token KY-014</span>
+<span class="text-neutral-400">|</span>
+<span class="font-mono text-xs text-neutral-600">Patient Code: MK-8042</span>
+<span class="text-neutral-400 hidden sm:inline">|</span>
+<span class="text-xs text-neutral-600 hidden sm:inline">Status: Awaiting Doctor Review</span>
+</div>
+<div class="flex items-center gap-3">
+<button class="px-5 py-2 text-xs font-semibold bg-neutral-950 text-white hover:bg-neutral-800 rounded-lg shadow-sm transition-colors flex items-center gap-2" type="button">
+<span class="">Review &amp; Edit Case Details</span>
+<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+<path d="M14 5l7 7m0 0l-7 7m7-7H3" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</button>
+</div></div>
+</footer>
+<!-- END: BottomActionBar -->
+
+
+</body></html>

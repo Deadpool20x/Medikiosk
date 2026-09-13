@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>PK-D02 — Patient Case | MEDIKIOSK</title>
+<!-- Tailwind CSS v3 with forms and container queries plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              dark: '#111827',
+              gray: '#6B7280',
+              lightGray: '#F3F4F6',
+              border: '#E5E7EB',
+              badgeBg: '#F3EFEA',
+              badgeText: '#786A5E',
+              amberBadgeBg: '#FEF3C7',
+              amberBadgeText: '#92400E',
+              greenBadgeBg: '#ECFDF5',
+              greenBadgeText: '#065F46',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<style data-purpose="custom-typography">
+    .label-heading {
+      font-size: 0.6875rem;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #6B7280;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-[#F8F9FA] text-[#1F2937] font-sans antialiased pb-24">
+<!-- BEGIN: TopHeader -->
+<header class="bg-white border-b border-[#E5E7EB] sticky top-0 z-30 px-6 py-2.5 flex items-center justify-between" data-purpose="global-navigation-bar">
+<!-- Left: Logo & Dept Pill -->
+<div class="flex items-center space-x-3">
+<div class="flex items-center space-x-2">
+<span class="inline-block w-2.5 h-2.5 rounded-full bg-black"></span>
+<span class="font-bold tracking-tight text-sm text-[#111827]">MEDIKIOSK</span>
+</div>
+<div class="bg-[#F3F4F6] text-[#4B5563] text-xs px-2.5 py-1 rounded border border-[#E5E7EB] font-medium">
+        DEPT: Panchakarma OPD
+      </div>
+</div>
+<!-- Center: Main Navigation Tabs -->
+<nav class="flex items-center space-x-1 bg-[#F3F4F6] p-0.5 rounded-lg border border-[#E5E7EB] text-xs font-medium" data-purpose="top-level-tabs">
+<a class="px-3.5 py-1 text-[#4B5563] hover:text-[#111827] rounded-md transition-colors" href="#">Queue</a>
+<a class="px-3.5 py-1 bg-white text-[#111827] shadow-sm rounded-md font-semibold" href="#">Cases</a>
+<a class="px-3.5 py-1 text-[#4B5563] hover:text-[#111827] rounded-md transition-colors" href="#">Archive</a>
+</nav>
+<!-- Right: User Avatar -->
+<div class="flex items-center">
+<div class="w-8 h-8 rounded-full bg-[#111827] flex items-center justify-center text-white text-xs cursor-pointer shadow-sm">
+<svg class="w-4 h-4 text-white" fill="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path clip-rule="evenodd" d="M7.5 6a4.5 4.5 0 119 0 4.5 4.5 0 01-9 0zM3.751 20.105a8.25 8.25 0 0116.498 0 .75.75 0 01-.437.695A18.683 18.683 0 0112 22.5c-2.786 0-5.433-.608-7.812-1.7a.75.75 0 01-.437-.695z" fill-rule="evenodd"></path>
+</svg>
+</div>
+</div>
+</header>
+<!-- END: TopHeader -->
+<!-- BEGIN: MainContentContainer -->
+<main class="max-w-[1400px] mx-auto px-6 pt-4 pb-12">
+<!-- Sub-header & Breadcrumb -->
+<div class="mb-4">
+<a class="inline-flex items-center text-xs text-[#4B5563] hover:text-[#111827] font-medium transition-colors" href="#">
+<span class="mr-1.5">←</span> Back to Queue
+      </a>
+</div>
+<!-- BEGIN: PatientBannerCard -->
+<div class="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm mb-6" data-purpose="patient-summary-banner">
+<div class="flex flex-wrap items-center justify-between gap-4">
+<!-- Token, Code, Dept, Time Details -->
+<div class="flex items-center space-x-8">
+<!-- Queue Token -->
+<div class="border-l-[3px] border-[#111827] pl-3">
+<span class="label-heading block">QUEUE TOKEN</span>
+<span class="text-2xl font-bold text-[#111827] tracking-tight">PK-008</span>
+</div>
+<!-- Patient Code -->
+<div>
+<span class="label-heading block">PATIENT CODE</span>
+<span class="text-sm font-semibold text-[#111827]">MK-8038</span>
+</div>
+<!-- Department -->
+<div>
+<span class="label-heading block">DEPARTMENT</span>
+<span class="text-sm font-medium text-[#111827]">Panchakarma</span>
+</div>
+<!-- Check-in Time -->
+<div>
+<span class="label-heading block">CHECK-IN TIME</span>
+<span class="text-sm font-medium text-[#111827]">10:12 AM</span>
+</div>
+</div>
+<!-- Banner Actions & Status -->
+<div class="flex items-center space-x-3">
+<!-- Status pill -->
+<div class="bg-[#FFFBEB] text-[#92400E] border border-[#FDE68A] text-xs px-3 py-1.5 rounded-full flex items-center space-x-1.5 font-medium">
+<span class="w-2 h-2 rounded-full bg-[#D97706]"></span>
+<span>Awaiting Doctor Review</span>
+</div>
+<!-- Action Button -->
+<button class="bg-[#111827] text-white text-xs font-medium px-4 py-2 rounded-lg hover:bg-black transition-colors shadow-sm">
+            Review / Edit Case
+          </button>
+</div>
+</div>
+</div>
+<!-- END: PatientBannerCard -->
+<!-- BEGIN: TwoColumnGrid -->
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+<!-- Left Column (Sections 1, 2, 3) -->
+<div class="lg:col-span-2 space-x-0 space-y-6">
+<!-- BEGIN: Section 1 (HPI) -->
+<section class="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm" data-purpose="chief-complaint-section">
+<!-- Header with Source Badge -->
+<div class="flex items-center justify-between pb-3 border-b border-[#F3F4F6] mb-4">
+<div class="flex items-center space-x-2">
+<span class="w-1.5 h-3.5 bg-[#111827] rounded-sm inline-block"></span>
+<h2 class="text-xs font-bold text-[#111827] uppercase tracking-wider">1. CHIEF COMPLAINT &amp; HISTORY OF PRESENT ILLNESS (HPI)</h2>
+</div>
+<span class="text-[10px] bg-[#EFECE8] text-[#5C554F] px-2.5 py-0.5 rounded font-medium border border-[#E4DFD8]">
+              Source: Patient Interview
+            </span>
+</div>
+<!-- Reported Complaint -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF] mb-4">
+<span class="label-heading block mb-1">REPORTED COMPLAINT</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+              Gradual weight gain over 3 years, chronic daytime sluggishness, heaviness in limbs, and mild breathlessness upon exertion (Sthaulya / Medoroga presentation).
+            </p>
+</div>
+<!-- Onset & Severity Grid -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Onset & Duration -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">ONSET &amp; DURATION</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                3 years, progressive exacerbation over past 8 months
+              </p>
+</div>
+<!-- Severity & Aggravating Factors -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">SEVERITY &amp; AGGRAVATING FACTORS</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Aggravated post sedentary afternoon meals; persistent fatigue and lethargy throughout early morning hours.
+              </p>
+</div>
+</div>
+</section>
+<!-- END: Section 1 (HPI) -->
+<!-- BEGIN: Section 2 (Medical & Health History) -->
+<section class="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm" data-purpose="medical-history-section">
+<!-- Header with Source Badge -->
+<div class="flex items-center justify-between pb-3 border-b border-[#F3F4F6] mb-4">
+<div class="flex items-center space-x-2">
+<span class="w-1.5 h-3.5 bg-[#111827] rounded-sm inline-block"></span>
+<h2 class="text-xs font-bold text-[#111827] uppercase tracking-wider">2. MEDICAL &amp; HEALTH HISTORY</h2>
+</div>
+<span class="text-[10px] bg-[#EFECE8] text-[#5C554F] px-2.5 py-0.5 rounded font-medium border border-[#E4DFD8]">
+              Source: Patient Interview
+            </span>
+</div>
+<!-- Row 1: Past Medical & Current Medications -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">PAST MEDICAL / SURGICAL</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Borderline dyslipidemia noted 1 year ago, on dietary modification. No surgical history.
+              </p>
+</div>
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF] relative">
+<div class="flex items-center justify-between mb-1">
+<span class="label-heading">CURRENT MEDICATIONS</span>
+<span class="text-[9px] bg-[#EFECE8] text-[#5C554F] px-1.5 py-0.5 rounded border border-[#E4DFD8]">Source: From uploaded document</span>
+</div>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Tab Triphala Guggulu 1 tab BD (herbal supplement)
+              </p>
+</div>
+</div>
+<!-- Row 2: Allergies & Family History -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">KNOWN ALLERGIES</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                No known drug allergies (NKDA)
+              </p>
+</div>
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">FAMILY HISTORY</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Paternal history of metabolic disorders and obesity.
+              </p>
+</div>
+</div>
+<!-- Row 3: Personal & Occupational History -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">PERSONAL &amp; OCCUPATIONAL HISTORY</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+              Desk job (IT consultant), sedentary routine (~8-9 hrs sitting), irregular sleep schedule.
+            </p>
+</div>
+</section>
+<!-- END: Section 2 (Medical & Health History) -->
+<!-- BEGIN: Section 3 (Ayurvedic Baseline Assessment) -->
+<section class="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm" data-purpose="ayurvedic-assessment-section">
+<!-- Header with Disclaimer Source Badge -->
+<div class="flex items-center justify-between pb-3 border-b border-[#F3F4F6] mb-2">
+<div class="flex items-center space-x-2">
+<span class="w-1.5 h-3.5 bg-[#111827] rounded-sm inline-block"></span>
+<h2 class="text-xs font-bold text-[#111827] uppercase tracking-wider">3. AYURVEDIC BASELINE ASSESSMENT</h2>
+</div>
+<span class="text-[10px] bg-[#EFECE8] text-[#5C554F] px-2.5 py-0.5 rounded font-medium border border-[#E4DFD8]">
+              Recorded Baseline • Uninterpreted
+            </span>
+</div>
+<!-- Disclaimer subline -->
+<p class="text-[11px] text-[#6B7280] italic mb-4">
+            Patient-reported characteristics only; no clinical diagnosis or dosha classification inferred.
+          </p>
+<!-- 3-column Grid: Prakriti, Agni, Koshtha -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+<!-- Prakriti -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">PRAKRITI (REPORTED CHARACTERISTICS)</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Heaviness tendency, cold sensitivity in extremities, moderate steady appetite with slow digestion.
+              </p>
+</div>
+<!-- Agni -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">AGNI (REPORTED DIGESTION)</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Manda Agni presentation — slow post-meal metabolic breakdown, heaviness lasting 3-4 hours after food.
+              </p>
+</div>
+<!-- Koshtha -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">KOSHTHA (REPORTED BOWEL HABIT)</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Mildly sluggish bowel movement, once daily or alternate days, tendency towards irregular evacuation.
+              </p>
+</div>
+</div>
+<!-- 2-column Grid: Nidana & Ahara-Vihara -->
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+<!-- Nidana -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">NIDANA (DIETARY / LIFESTYLE FACTORS)</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Excessive consumption of sweet, oily, and heavy food items; daytime napping (divasvapna); lack of daily physical activity.
+              </p>
+</div>
+<!-- Ahara - Vihara Habits -->
+<div class="bg-[#FBFBFC] rounded-lg p-3.5 border border-[#EBECEF]">
+<span class="label-heading block mb-1">AHARA – VIHARA HABITS</span>
+<p class="text-xs text-[#1F2937] leading-relaxed">
+                Predominantly carbohydrate-rich vegetarian diet; sedentary lifestyle with minimal exercise.
+              </p>
+</div>
+</div>
+</section>
+<!-- END: Section 3 (Ayurvedic Baseline Assessment) -->
+</div>
+<!-- Right Column (Section 4: Uploaded Documents) -->
+<div class="space-y-6">
+<!-- BEGIN: Section 4 (Uploaded Documents) -->
+<section class="bg-white rounded-xl border border-[#E5E7EB] p-5 shadow-sm" data-purpose="documents-section">
+<!-- Section Heading -->
+<div class="flex items-center justify-between pb-3 border-b border-[#F3F4F6] mb-4">
+<h2 class="text-xs font-bold text-[#111827] uppercase tracking-wider">4. UPLOADED DOCUMENTS</h2>
+<span class="text-xs text-[#6B7280]">1 Document</span>
+</div>
+<!-- Document Preview Card -->
+<div class="bg-white rounded-lg border border-[#E5E7EB] p-4 text-xs">
+<!-- Document Meta Header -->
+<div class="flex items-start justify-between pb-3 border-b border-[#F3F4F6]">
+<div class="flex items-start space-x-2.5">
+<!-- Document file icon -->
+<div class="w-8 h-8 rounded border border-[#D1D5DB] flex items-center justify-center bg-[#F9FAFB] text-[#4B5563] shrink-0">
+<svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8"></path>
+</svg>
+</div>
+<div>
+<h3 class="font-medium text-[#111827] text-xs leading-tight">Previous_Prescription_Nov2023.pdf</h3>
+<span class="text-[11px] text-[#6B7280] block mt-0.5">Uploaded via Kiosk Camera</span>
+</div>
+</div>
+<!-- Confidence pill badge -->
+<span class="bg-[#ECFDF5] text-[#059669] border border-[#A7F3D0] text-[10px] px-2 py-0.5 rounded font-medium text-right shrink-0">
+                High confidence
+              </span>
+</div>
+<!-- Extracted Content Box -->
+<div class="py-3.5">
+<span class="text-[11px] text-[#6B7280] block mb-1.5">Extracted Content:</span>
+<ul class="space-y-1 text-xs text-[#1F2937] pl-3.5 list-disc marker:text-[#6B7280]">
+<li>Tab Triphala Guggulu 1 tab BD</li>
+<li>Lipid Profile routine requisition note</li>
+</ul>
+</div>
+<!-- Card Footer: Status & Action Link -->
+<div class="pt-3 border-t border-[#F3F4F6] flex items-center justify-between text-[11px]">
+<span class="text-[#6B7280]">Status: <span class="text-[#374151]">Reviewable by doctor</span></span>
+<a class="text-[#111827] font-semibold underline hover:text-black" href="#">View Scan</a>
+</div>
+</div>
+</section>
+<!-- END: Section 4 (Uploaded Documents) -->
+</div>
+</div>
+<!-- END: TwoColumnGrid -->
+</main>
+<!-- END: MainContentContainer -->
+<!-- BEGIN: PersistentBottomBar -->
+<aside class="fixed bottom-0 left-0 right-0 bg-white border-t border-[#E5E7EB] px-6 py-3 z-40 shadow-lg flex items-center justify-between" data-purpose="persistent-footer-bar">
+<div class="text-xs text-[#4B5563] font-medium flex items-center space-x-2">
+<span class="font-bold text-[#111827]">Token PK-008</span>
+<span>|</span>
+<span>Patient Code: <strong class="text-[#111827] font-semibold">MK-8038</strong></span>
+<span>|</span>
+<span>Status: <span class="text-[#92400E] font-medium">Awaiting Doctor Review</span></span>
+</div>
+<div>
+<button class="bg-[#111827] text-white text-xs font-medium px-5 py-2 rounded-lg hover:bg-black transition-colors flex items-center space-x-2 shadow-sm">
+<span>Review &amp; Edit Case Details</span>
+<span>→</span>
+</button>
+</div>
+</aside>
+<!-- END: PersistentBottomBar -->
+</body></html>
