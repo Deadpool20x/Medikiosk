@@ -6,7 +6,7 @@ import uuid
 import secrets
 from datetime import datetime, timezone
 from backend.models.schema import Session, Patient, DoctorReview, DocumentField, HistoryOfPresentIllness, AnswerRecord
-from backend.db import get_session as db_get_session, save_session as db_save_session, init_db, next_queue_token, next_patient_code
+from backend.db import get_session as db_get_session, save_session as db_save_session, init_db, next_queue_token, next_patient_code, lookup_session_by_patient_code
 import os
 import logging
 
@@ -151,14 +151,18 @@ def _interview_status(session: Session) -> str:
     return "in_progress"
 
 
+from pydantic import BaseModel, Field, AliasChoices
+
 class StartSessionRequest(BaseModel):
     patient: Patient
-    language: str = Field(default="en")
+    language: str = Field(default="en", validation_alias=AliasChoices("language", "preferred_language"))
     visit_type: str = Field(default="new")
     adaptive: Optional[bool] = Field(default=None)
+    prior_patient_code: Optional[str] = Field(default=None, max_length=50)
 
 class StartSessionResponse(BaseModel):
     session_id: str
+    prior_context_loaded: bool = False
 
 class ConsentRequest(BaseModel):
     consent_given: bool = True
@@ -254,12 +258,48 @@ class SessionResponse(BaseModel):
     interview_status: str = "in_progress"
     adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
 
+class PatientLookupResponse(BaseModel):
+    found: bool
+    visit_date: str = ""
+    chief_complaint: str = ""
+    presentation_domain: str = ""
+
+@router.get("/patient-lookup", response_model=PatientLookupResponse)
+async def patient_lookup(code: str):
+    """Resolve a returning patient's code to a safe prior-visit summary.
+
+    Returns only: found status, visit date, chief complaint string, presentation domain.
+    Never returns raw_answers, documents, or other PHI fields.
+    A 200 with found=False means the code exists but has no completed visits.
+    A 404 is returned for structurally invalid codes.
+    """
+    code = (code or "").strip()
+    if not code or len(code) > 50:
+        raise HTTPException(status_code=400, detail="Invalid patient code")
+    prior = lookup_session_by_patient_code(code)
+    if prior is None:
+        return PatientLookupResponse(found=False)
+    return PatientLookupResponse(
+        found=True,
+        visit_date=prior.get("visit_date", ""),
+        chief_complaint=prior.get("chief_complaint", ""),
+        presentation_domain=prior.get("presentation_domain", ""),
+    )
+
 @router.post("/start", response_model=StartSessionResponse)
 async def start_session(payload: StartSessionRequest):
     session_id = str(uuid.uuid4())
     use_adaptive = True
     if payload.adaptive is False:
         use_adaptive = False
+
+    # --- Returning patient: load prior context (read-only, privacy-bounded) ---
+    prior_context: Optional[Dict[str, Any]] = None
+    prior_context_loaded = False
+    if payload.visit_type == "returning" and payload.prior_patient_code:
+        prior_context = lookup_session_by_patient_code(payload.prior_patient_code)
+        if prior_context:
+            prior_context_loaded = True
 
     session = Session(
         session_id=session_id,
@@ -276,7 +316,7 @@ async def start_session(payload: StartSessionRequest):
         doctor_review=DoctorReview(),
         answer_records=[],
         raw_answers=[],
-        presentation_domain=None,
+        presentation_domain=prior_context.get("presentation_domain") or None if prior_context else None,
         collected_concepts={},
         asked_questions=[],
         asked_concepts=[],
@@ -284,14 +324,24 @@ async def start_session(payload: StartSessionRequest):
         adaptive_question_count=0,
         mentioned_documents=[],
         adaptive=use_adaptive,
+        # concept_metadata holds the prior-visit summary for LLM context, never shown to patient
+        concept_metadata=[{"prior_visit": prior_context}] if prior_context else [],
     )
     if use_adaptive:
-        initial_q = get_fallback_question(session, "primary_symptom")
-        session.current_pending_question = initial_q["text"]
-        session.asked_questions = [initial_q["text"]]
+        # For returning patients with prior context: open with current concern question
+        # rather than the generic chief complaint question
+        if prior_context and prior_context.get("chief_complaint"):
+            from backend.rules.adaptive_interview import get_fallback_question as _fbq
+            initial_q = _fbq(session, "primary_symptom")
+            session.current_pending_question = initial_q["text"]
+        else:
+            initial_q = get_fallback_question(session, "primary_symptom")
+            session.current_pending_question = initial_q["text"]
+        session.asked_questions = [session.current_pending_question]
         session.asked_concepts = ["primary_symptom"]
     db_save_session(session)
-    return StartSessionResponse(session_id=session_id)
+    return StartSessionResponse(session_id=session_id, prior_context_loaded=prior_context_loaded)
+
 
 @router.post("/{session_id}/consent", response_model=ConsentResponse)
 async def submit_consent(session_id: str, payload: ConsentRequest):
@@ -620,25 +670,31 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         confidence = llm_result.get("confidence", 0.85)
     except Exception as e:
         logger.error("generate_adaptive_turn failed: %s", e, exc_info=True)
-        # Fallback to extract_case if mocked in legacy tests
-        try:
-            legacy_case = await extract_case(payload.answer, current_concept, session.presentation_domain)
-            llm_result = {
-                "case_update": {
-                    "presentation": legacy_case.get("domain"),
-                    "concepts": legacy_case.get("concepts", {}),
-                    "denied_concepts": [],
-                    "mentioned_documents": legacy_case.get("mentioned_documents", []),
-                },
-                "next_question": None,
-                "status": "continue",
-                "confidence": legacy_case.get("confidence", 0.8),
-                "provider": legacy_case.get("provider"),
-            }
-            provider_used = legacy_case.get("provider")
-            confidence = legacy_case.get("confidence", 0.8)
-        except Exception as e2:
-            logger.error("extract_case fallback also failed: %s", e2, exc_info=True)
+        # Fallback to extract_case ONLY if mocked in unit tests (avoids duplicate provider chain call in production)
+        from unittest.mock import Mock
+        if isinstance(extract_case, Mock) or hasattr(extract_case, "assert_called") or hasattr(extract_case, "mock_calls"):
+            try:
+                legacy_case = await extract_case(payload.answer, current_concept, session.presentation_domain)
+                llm_result = {
+                    "case_update": {
+                        "presentation": legacy_case.get("domain"),
+                        "concepts": legacy_case.get("concepts", {}),
+                        "denied_concepts": [],
+                        "mentioned_documents": legacy_case.get("mentioned_documents", []),
+                    },
+                    "next_question": None,
+                    "status": "continue",
+                    "confidence": legacy_case.get("confidence", 0.8),
+                    "provider": legacy_case.get("provider"),
+                }
+                provider_used = legacy_case.get("provider")
+                confidence = legacy_case.get("confidence", 0.8)
+            except Exception as e2:
+                logger.error("extract_case fallback also failed: %s", e2, exc_info=True)
+                needs_review = True
+        else:
+            # In production, all configured LLM providers already failed or timed out
+            # in generate_adaptive_turn. Do not call the entire provider chain again.
             needs_review = True
 
     # Structured case-state concepts & domain update

@@ -11,6 +11,7 @@ import {
   getSession,
   completeDocumentIntake,
   triggerEmergency,
+  lookupPatient,
 } from "../lib/api";
 import type { Patient, Session as SessionType } from "../lib/types";
 import { DocumentUpload } from "./document-upload";
@@ -56,7 +57,7 @@ export function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
   );
 }
 
-type Screen = "welcome" | "consent" | "code" | "interview" | "documents" | "summary" | "safety" | "waiting";
+type Screen = "welcome" | "lookup" | "consent" | "code" | "interview" | "documents" | "summary" | "safety" | "waiting";
 
 export function PatientFlow() {
   const [screen, setScreen] = useState<Screen>("welcome");
@@ -82,6 +83,10 @@ export function PatientFlow() {
   const [consentChecked, setConsentChecked] = useState(false);
   const router = useRouter();
 
+  // Returning patient lookup state
+  const [priorPatientCode, setPriorPatientCode] = useState("");
+  const [lookupResult, setLookupResult] = useState<{ found: boolean; chief_complaint: string; visit_date: string } | null>(null);
+
   // P04 interview state
   const [answerInput, setAnswerInput] = useState("");
   const [chat, setChat] = useState<Array<{ q: string; a: string }>>([]);
@@ -90,29 +95,45 @@ export function PatientFlow() {
   // P08 token state
   const [tokenData, setTokenData] = useState<{ token: string; department: string } | null>(null);
 
-  // Frontend mirrors of backend field ids/labels (matches backend rules/interview_rules.py).
-  // Backend is authoritative for the actual question string (`session.next_question`).
-  const FIELD_LABELS: Array<{ id: string; label: string }> = [
-    { id: "chief_complaint", label: "Chief Complaint" },
-    { id: "onset", label: "Onset" },
-    { id: "duration", label: "Duration" },
-    { id: "severity", label: "Severity" },
-    { id: "character", label: "Character" },
-    { id: "associated_symptoms", label: "Associated Symptoms" },
-  ];
-  const CURRENT_FIELD_ID = session?.interview_step ?? "";
-  const CURRENT_STEP_LABEL =
-    FIELD_LABELS.find((f) => f.id === CURRENT_FIELD_ID)?.label ?? "Interview";
-  const ANSWERED_COUNT = session
-    ? FIELD_LABELS.filter((f) => {
-        if (f.id === "chief_complaint") return !!session.chief_complaint;
-        if (f.id === "associated_symptoms")
-          return (session.history_of_present_illness.associated_symptoms?.length ?? 0) > 0;
-        const v = (session.history_of_present_illness as unknown as Record<string, unknown>)[f.id];
-        return typeof v === "string" && v.trim().length > 0;
-      }).length
-    : 0;
-  const TOTAL_STEPS = FIELD_LABELS.length;
+  // Adaptive-aware progress: use backend authoritative counts for adaptive sessions,
+  // fall back to legacy field-count for non-adaptive sessions.
+  const isAdaptive = session?.adaptive_question_limit != null && session.adaptive_question_limit > 0;
+  const ANSWERED_COUNT = isAdaptive
+    ? (session?.adaptive_question_count ?? session?.questions_asked ?? 0)
+    : (() => {
+        const LEGACY_FIELDS = ["chief_complaint", "onset", "duration", "severity", "character", "associated_symptoms"];
+        return session
+          ? LEGACY_FIELDS.filter((f) => {
+              if (f === "chief_complaint") return !!session.chief_complaint;
+              if (f === "associated_symptoms")
+                return (session.history_of_present_illness.associated_symptoms?.length ?? 0) > 0;
+              const v = (session.history_of_present_illness as unknown as Record<string, unknown>)[f];
+              return typeof v === "string" && v.trim().length > 0;
+            }).length
+          : 0;
+      })();
+  const TOTAL_STEPS = isAdaptive
+    ? (session?.adaptive_question_limit ?? 5)
+    : 6;
+  // Step chip label: adaptive sessions show "Interview in progress" with honest count,
+  // legacy sessions show the current field name.
+  const CURRENT_STEP_LABEL = isAdaptive
+    ? (ANSWERED_COUNT > 0
+        ? `Interview in progress · ${ANSWERED_COUNT} question${ANSWERED_COUNT !== 1 ? "s" : ""} asked`
+        : "Interview in progress")
+    : (() => {
+        const FIELD_LABELS = [
+          { id: "chief_complaint", label: "Chief Complaint" },
+          { id: "onset", label: "Onset" },
+          { id: "duration", label: "Duration" },
+          { id: "severity", label: "Severity" },
+          { id: "character", label: "Character" },
+          { id: "associated_symptoms", label: "Associated Symptoms" },
+        ];
+        return FIELD_LABELS.find((f) => f.id === (session?.interview_step ?? ""))?.label ?? "Interview";
+      })();
+  // Dot count for progress bar: adaptive shows asked dots (max 5 slots), not a fixed total
+  const PROGRESS_DOT_COUNT = isAdaptive ? Math.min(TOTAL_STEPS, 5) : TOTAL_STEPS;
 
   // Restore session on refresh from sessionStorage
   useEffect(() => {
@@ -171,12 +192,28 @@ export function PatientFlow() {
     [name, age]
   );
 
+  async function handleLookup() {
+    const code = priorPatientCode.trim();
+    if (!code) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const result = await lookupPatient(code);
+      setLookupResult(result);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function handleStart() {
     setError(null);
     setLoading(true);
     try {
       const patient: Patient = { name: name.trim(), age: Number(age), gender };
-      const res = await startPatientSession(patient, language, visitType);
+      const resolvedPriorCode = visitType === "returning" && lookupResult?.found ? priorPatientCode.trim() : undefined;
+      const res = await startPatientSession(patient, language, visitType, true, resolvedPriorCode);
       setSessionId(res.session_id);
       window.sessionStorage.setItem(SESSION_KEY, res.session_id);
       setScreen("consent");
@@ -672,8 +709,8 @@ export function PatientFlow() {
             <p className="mk-p04-sub">
               Please describe what you are experiencing in your own words. We will take this one step at a time.
             </p>
-            <div className="mk-p04-progress" aria-label={`Question ${Math.min(ANSWERED_COUNT + 1, TOTAL_STEPS)} of ${TOTAL_STEPS}`}>
-              {Array.from({ length: TOTAL_STEPS }).map((_, i) => (
+            <div className="mk-p04-progress" aria-label={isAdaptive ? `${ANSWERED_COUNT} questions asked` : `Question ${Math.min(ANSWERED_COUNT + 1, TOTAL_STEPS)} of ${TOTAL_STEPS}`}>
+              {Array.from({ length: PROGRESS_DOT_COUNT }).map((_, i) => (
                 <span
                   key={i}
                   className={`mk-p04-progress__dot ${i < ANSWERED_COUNT ? "mk-p04-progress__dot--done" : ""} ${i === ANSWERED_COUNT ? "mk-p04-progress__dot--active" : ""}`}
@@ -1196,7 +1233,7 @@ export function PatientFlow() {
               <label className="mk-field-label">Visit status</label>
               <div className="mk-chip-group">
                 <div className="mk-chip selected">
-                  New Patient
+                  {visitType === "returning" ? "Returning Patient" : "New Patient"}
                 </div>
               </div>
             </div>
@@ -1239,13 +1276,79 @@ export function PatientFlow() {
             </div>
 
             <button
-              onClick={handleStart}
+              onClick={visitType === "returning" ? () => setScreen("lookup") : handleStart}
               disabled={!canStart || loading}
               className="mk-button mk-button--primary"
               style={{ width: "100%" }}
             >
-              {loading ? "Starting…" : "Start Now →"}
+              {loading ? "Starting…" : visitType === "returning" ? "Continue →" : "Start Now →"}
             </button>
+          </div>
+        )}
+
+        {screen === "lookup" && (
+          <div>
+            <h1 className="mk-question">Enter Your Patient Code</h1>
+            <p className="mk-helper">Your patient code is the ID from your previous visit (e.g. AIIA-202609-00001).</p>
+
+            <div className="mk-form-group">
+              <label className="mk-field-label">Patient Code</label>
+              <input
+                className="mk-input"
+                value={priorPatientCode}
+                onChange={(e) => { setPriorPatientCode(e.target.value.toUpperCase()); setLookupResult(null); }}
+                placeholder="AIIA-YYYYMM-NNNNN"
+                autoComplete="off"
+                onKeyDown={(e) => e.key === "Enter" && handleLookup()}
+              />
+            </div>
+
+            {lookupResult !== null && (
+              <div className={`mk-info-banner ${lookupResult.found ? "mk-info-banner--success" : "mk-info-banner--warn"}`} role="status">
+                {lookupResult.found ? (
+                  <>
+                    <strong>Previous visit found</strong>
+                    {lookupResult.chief_complaint && (
+                      <p style={{ margin: "4px 0 0" }}>Last complaint: {lookupResult.chief_complaint}</p>
+                    )}
+                    {lookupResult.visit_date && (
+                      <p style={{ margin: "2px 0 0", fontSize: "0.85em", opacity: 0.75 }}>{lookupResult.visit_date.slice(0, 10)}</p>
+                    )}
+                  </>
+                ) : (
+                  <span>No completed visit found for this code — we will start a fresh intake.</span>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: "8px", marginTop: "16px" }}>
+              <button
+                onClick={() => setScreen("welcome")}
+                className="mk-button"
+                style={{ flex: "0 0 auto" }}
+              >
+                ← Back
+              </button>
+              {lookupResult === null ? (
+                <button
+                  onClick={handleLookup}
+                  disabled={!priorPatientCode.trim() || loading}
+                  className="mk-button mk-button--primary"
+                  style={{ flex: 1 }}
+                >
+                  {loading ? "Looking up…" : "Look Up →"}
+                </button>
+              ) : (
+                <button
+                  onClick={handleStart}
+                  disabled={loading}
+                  className="mk-button mk-button--primary"
+                  style={{ flex: 1 }}
+                >
+                  {loading ? "Starting…" : "Start Visit →"}
+                </button>
+              )}
+            </div>
           </div>
         )}
 

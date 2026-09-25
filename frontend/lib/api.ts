@@ -60,17 +60,27 @@ export async function startPatientSession(
   patient: Patient,
   language: string = "en",
   visit_type: string = "new",
-  adaptive: boolean = true
+  adaptive: boolean = true,
+  prior_patient_code?: string,
 ): Promise<StartSessionResponse> {
   const response = await fetch(`${API_BASE_URL}/session/start`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ patient, language, visit_type, adaptive }),
+    body: JSON.stringify({ patient, language, visit_type, adaptive, prior_patient_code }),
   });
 
   return handleResponse<StartSessionResponse>(response, "Failed to start patient session");
+}
+
+export async function lookupPatient(code: string): Promise<{ found: boolean; visit_date: string; chief_complaint: string; presentation_domain: string }> {
+  const response = await fetch(`${API_BASE_URL}/session/patient-lookup?code=${encodeURIComponent(code)}`, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  return handleResponse(response, "Patient lookup failed");
 }
 
 export async function submitConsent(sessionId: string): Promise<ConsentResponse> {

@@ -803,6 +803,8 @@ def build_conversation_context(session_like: Any, new_answer: str) -> Dict[str, 
     if language not in ("en", "hi", "gu"):
         language = "en"
 
+    visit_type = getattr(session_like, "visit_type", "new") or "new"
+
     # Prior turns (last 5 to keep context bounded)
     raw_answers = getattr(session_like, "raw_answers", []) or []
     asked_questions = getattr(session_like, "asked_questions", []) or []
@@ -845,9 +847,17 @@ def build_conversation_context(session_like: Any, new_answer: str) -> Dict[str, 
     unanswered = [c for c in knowledge.relevant_concepts if c not in collected or not str(collected[c]).strip()]
     unanswered = [c for c in unanswered if c not in denied_keys]
 
+    # --- Prior visit context (returning patients only) ---
+    # concept_metadata[0] holds {"prior_visit": {...}} if visit_type=="returning"
+    prior_visit_context: Optional[Dict[str, Any]] = None
+    concept_metadata = getattr(session_like, "concept_metadata", []) or []
+    if concept_metadata and isinstance(concept_metadata[0], dict):
+        prior_visit_context = concept_metadata[0].get("prior_visit")
+
     return {
         "patient": patient_info,
         "language": language,
+        "visit_type": visit_type,
         "current_answer": new_answer,
         "conversation_history": history,
         "asked_questions": asked_questions,
@@ -855,7 +865,7 @@ def build_conversation_context(session_like: Any, new_answer: str) -> Dict[str, 
         "collected_concepts": collected,
         "denied_concepts": denied_keys,
         "denial_hint": denial_hint,
-        "concept_metadata": getattr(session_like, "concept_metadata", []) or [],
+        "concept_metadata": concept_metadata,
         "language_normalized_symptoms": norm["canonical_concepts"],
         "matched_vernacular_phrases": norm["matched_phrases"],
         "presentation_domain": knowledge.domain_id,
@@ -865,6 +875,7 @@ def build_conversation_context(session_like: Any, new_answer: str) -> Dict[str, 
         "concept_guidance": {k: knowledge.concept_guidance.get(k, "") for k in unanswered[:5]},
         "turn_count": getattr(session_like, "adaptive_question_count", 0),
         "max_turns": MAX_ADAPTIVE_QUESTIONS,
+        "prior_visit_context": prior_visit_context,
     }
 
 
@@ -1026,7 +1037,7 @@ def validate_llm_proposal(
     # read unnaturally; require an explicit question marker so the correction pass rephrases.
     if patient_lang in ("gu", "hi") and len(q_text.strip()) <= 60:
         q_markers = {
-            "gu": ["શું", "કેટલા", "કેટલી", "કેટલાં", "ક્યારે", "ક્યાં", "કયા", "કઈ", "કયું", "કેવી", "કેવું", "કેવા", "કેમ", "શાના"],
+            "gu": ["શું", "કેટલા", "કેટલી", "કેટલાં", "ક્યારે", "ક્યાં", "કયા", "કઈ", "કયું", "કેવી", "કેવું", "કેવા", "કેમ", "શાના", "ક્યારથી"],
             "hi": ["क्या", "कितने", "कितनी", "कब", "कहाँ", "कैसे", "कैसा", "कौन", "कौनसा"],
         }
         if not any(m in q_text for m in q_markers[patient_lang]):

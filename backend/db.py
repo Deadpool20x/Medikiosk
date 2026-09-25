@@ -360,6 +360,44 @@ def list_queued_sessions(department: Optional[str] = None, db_path: Optional[str
     finally:
         conn.close()
 
+def lookup_session_by_patient_code(patient_code: str, db_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Return a privacy-safe summary of the most recent completed session for a patient code.
+
+    Only returns data appropriate for seeding follow-up context:
+    chief_complaint, presentation_domain, collected_concepts, hpi summary, visit_date.
+    Privacy boundary: raw_answers, documents, doctor_review, safety_detail are NOT returned.
+    """
+    conn = get_db_connection(db_path)
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT session_id, chief_complaint, hpi_json, presentation_domain, "
+            "collected_concepts_json, created_at FROM sessions "
+            "WHERE patient_code = ? AND interview_complete = 1 "
+            "ORDER BY created_at DESC LIMIT 1",
+            (patient_code,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        hpi = json.loads(row["hpi_json"] or "{}")
+        concepts = json.loads(row["collected_concepts_json"] or "{}")
+        return {
+            "session_id": row["session_id"],
+            "chief_complaint": row["chief_complaint"] or "",
+            "presentation_domain": row["presentation_domain"] or "",
+            "collected_concepts": concepts,
+            "hpi_summary": {
+                "onset": hpi.get("onset") or "",
+                "duration": hpi.get("duration") or "",
+                "severity": hpi.get("severity") or "",
+            },
+            "visit_date": str(row["created_at"] or ""),
+        }
+    finally:
+        conn.close()
+
+
 def list_flagged_sessions(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
     """Return sessions whose safety_flagged=1 for the emergency dashboard."""
     conn = get_db_connection(db_path)

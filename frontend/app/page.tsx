@@ -109,10 +109,10 @@ export default function HomePage() {
       <main className="mk-p01-main">
         <div className="mk-p01-main__left">
           <div className="mk-p01-step">
-            <span className="mk-p01-step__label">Step 1 of 6 — Initialization</span>
+            <span className="mk-p01-step__label">Initialization — Language &amp; Patient Status</span>
             <div className="mk-p01-step__dots">
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <span key={n} className={`mk-p01-step__dot ${n <= 1 ? "mk-p01-step__dot--active" : ""} ${n < 1 ? "mk-p01-step__dot--done" : ""}`} />
+              {["Language", "Consent", "Code", "Interview", "Records", "Summary", "Token"].map((item, i) => (
+                <span key={item} className={`mk-p01-step__dot ${i === 0 ? "mk-p01-step__dot--active" : ""}`} />
               ))}
             </div>
           </div>

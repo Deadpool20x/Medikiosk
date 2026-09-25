@@ -1,0 +1,29 @@
+{
+  "English (EN)": {
+    "queue_time": 0.334635691,
+    "prompt_tokens": 1307,
+    "prompt_time": 0.037688125,
+    "completion_tokens": 688,
+    "completion_time": 0.711566398,
+    "total_tokens": 1995,
+    "total_time": 0.749254523,
+    "prompt_tokens_details": {
+      "cached_tokens": 768
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 564
+    },
+    "duration_seconds": 1.544520378112793,
+    "response_content_length": 469
+  },
+  "Hindi (HI)": {
+    "error": 429,
+    "text": "{\"error\":{\"message\":\"Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01m1gzr3rye9cate8ykn1d205r` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 198998, Requested 2058. Please try again in 7m36.192s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}\n",
+    "duration": 0.39940357208251953
+  },
+  "Gujarati (GU)": {
+    "error": 429,
+    "text": "{\"error\":{\"message\":\"Rate limit reached for model `openai/gpt-oss-20b` in organization `org_01m1gzr3rye9cate8ykn1d205r` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 198986, Requested 2127. Please try again in 8m0.816s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing\",\"type\":\"tokens\",\"code\":\"rate_limit_exceeded\"}}\n",
+    "duration": 0.3555614948272705
+  }
+}

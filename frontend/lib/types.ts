@@ -63,6 +63,15 @@ export interface Session {
   safety_detail: string[];
   department: string | null;
   queue_token: string | null;
+  presentation_domain: string | null;
+  collected_concepts: Record<string, unknown>;
+  asked_questions: string[];
+  adaptive_question_count: number;
+  questions_asked: number;
+  adaptive_question_limit: number;
+  mentioned_documents: string[];
+  denied_concepts: string[];
+  interview_status: string;
 }
 
 export interface ApiResponse<T> {
@@ -79,6 +88,7 @@ export interface StartSessionRequest {
 
 export interface StartSessionResponse {
   session_id: string;
+  prior_context_loaded?: boolean;
 }
 
 export interface ConsentRequest {

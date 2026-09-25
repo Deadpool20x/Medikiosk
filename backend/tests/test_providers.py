@@ -70,9 +70,11 @@ def test_new_providers_configured_with_keys(monkeypatch):
     assert CerebrasProvider().provider_name == "cerebras"
 
 
-def test_nvidia_nim_capped_timeout():
-    p = NvidiaNimProvider()
-    assert p._timeout == 7.0
+def test_provider_capped_timeouts():
+    assert NvidiaNimProvider()._timeout == 7.0
+    assert GroqProvider()._timeout == 8.0
+    assert CerebrasProvider()._timeout == 8.0
+    assert OpenRouterProvider()._timeout == 8.0
 
 
 def test_placeholders_rejected(monkeypatch):
@@ -173,6 +175,22 @@ def test_iter_llm_providers_all_three(monkeypatch):
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     providers = iter_llm_providers()
     assert [p.provider_name for p in providers] == ["groq", "cerebras", "nvidia_nim"]
+
+
+def test_iter_llm_providers_language_routing(monkeypatch):
+    monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+    monkeypatch.setenv("CEREBRAS_API_KEY", "csk-test")
+    monkeypatch.setenv("NVIDIA_NIM_API_KEY", "nvapi-test")
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    en_providers = iter_llm_providers(language="en")
+    assert [p.provider_name for p in en_providers] == ["groq", "cerebras", "nvidia_nim"]
+
+    hi_providers = iter_llm_providers(language="hi")
+    assert [p.provider_name for p in hi_providers] == ["cerebras", "groq", "nvidia_nim"]
+
+    gu_providers = iter_llm_providers(language="gu")
+    assert [p.provider_name for p in gu_providers] == ["cerebras", "groq", "nvidia_nim"]
 
 
 def test_iter_llm_providers_raises_when_none(monkeypatch):

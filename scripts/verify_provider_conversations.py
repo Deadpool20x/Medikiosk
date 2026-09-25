@@ -143,10 +143,14 @@ def run_end_to_end_conversations():
     compound_mini_detected = []
 
     for language_name, convo in CONVERSATIONS.items():
+        if results:
+            print("  Pausing 6s to allow TPM rate-limit sliding window to reset...")
+            time.sleep(6)
         print(f"\n--- Starting {language_name} ({convo['lang'].upper()}) Conversation ---")
         # 1. Start session
         start_payload = {
             "patient": {"name": convo["name"], "age": convo["age"], "gender": convo["gender"]},
+            "language": convo["lang"],
             "preferred_language": convo["lang"],
             "visit_type": "new"
         }
@@ -169,9 +173,9 @@ def run_end_to_end_conversations():
 
         # 4. Run 5 turns
         for turn_num, ans in enumerate(convo["answers"], 1):
-            # Groq free tier limit is 8k TPM; add brief breathing room if needed to avoid throttling
+            # Groq free tier limit is 8k TPM; add brief breathing room to avoid throttling
             if turn_num > 1:
-                time.sleep(3)
+                time.sleep(4)
 
             ans_payload = {"answer": ans}
             ans_res, status_code, turn_dt = post_json(f"/session/{session_id}/answer", ans_payload)

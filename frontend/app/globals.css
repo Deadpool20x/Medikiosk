@@ -34,6 +34,32 @@ body {
 }
 
 /* ============================================
+   CANONICAL BUTTON VARIANTS (Issue #1)
+   ============================================ */
+.mk-btn {
+  font: inherit;
+  border-radius: 8px;
+  padding: 10px 20px;
+  cursor: pointer;
+  border: none;
+  transition: background-color .15s, border-color .15s;
+}
+.mk-btn--primary {
+  background: #111827;
+  color: #fff;
+}
+.mk-btn--secondary {
+  background: #fff;
+  color: #111827;
+  border: 1px solid #D1D5DB;
+}
+.mk-btn--danger {
+  background: #DC2626;
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ============================================
     P01 WELCOME / LANGUAGE SELECTION
     ============================================ */
 .mk-p01 {
@@ -67,7 +93,7 @@ body {
 }
 
 .mk-p01-header__pill {
-  font-size: 0.6875rem;
+  font-size: 12px;
   font-weight: 600;
   color: var(--mk-text-secondary);
   background: var(--mk-primary-soft);
@@ -183,7 +209,7 @@ body {
   font-weight: 600;
   color: var(--mk-text-secondary);
   letter-spacing: 0.04em;
-  text-transform: uppercase;
+  text-transform: none;
 }
 
 .mk-p01-step__dots {
@@ -208,7 +234,7 @@ body {
 }
 
 .mk-p01-eyebrow {
-  font-size: 0.6875rem;
+  font-size: 12px;
   font-weight: 700;
   color: var(--mk-text-secondary);
   letter-spacing: 0.08em;
@@ -239,8 +265,9 @@ body {
 
 .mk-p01-section__header {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
 }
 
 .mk-p01-section__title {
@@ -248,11 +275,12 @@ body {
   font-weight: 700;
   color: var(--mk-text);
   margin: 0;
+  text-transform: none;
 }
 
 .mk-p01-section__hint {
-  font-size: 0.75rem;
-  color: var(--mk-text-secondary);
+  font-size: 12px;
+  color: #6B7280;
 }
 
 /* ---- Language grid ---- */
@@ -267,7 +295,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 14px 16px;
-  border: 1px solid var(--mk-border);
+  border: 1px solid #9CA3AF;
   border-radius: var(--mk-radius-control);
   background: var(--mk-surface);
   cursor: pointer;
@@ -276,7 +304,7 @@ body {
 }
 
 .mk-p01-lang-card:hover {
-  border-color: var(--mk-primary);
+  border-color: #4B5563;
 }
 
 .mk-p01-lang-card--active {
@@ -326,21 +354,25 @@ body {
   border-color: var(--mk-primary);
 }
 
+.mk-p01-status-card.selected,
 .mk-p01-status-card--active {
-  border-color: var(--mk-primary);
-  background: var(--mk-primary-soft);
+  background: #111827;
+  color: #fff;
+  border-color: #111827;
+}
+
+.mk-p01-status-card.selected .mk-p01-status-card__label,
+.mk-p01-status-card--active .mk-p01-status-card__label {
+  color: #fff;
+}
+
+.mk-p01-status-card.selected .mk-p01-status-card__sub,
+.mk-p01-status-card--active .mk-p01-status-card__sub {
+  color: #9CA3AF;
 }
 
 .mk-p01-status-card__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--mk-border);
-  flex-shrink: 0;
-}
-
-.mk-p01-status-card--active .mk-p01-status-card__dot {
-  background: var(--mk-primary);
+  display: none;
 }
 
 .mk-p01-status-card__label {
@@ -475,8 +507,9 @@ body {
 
 .mk-p01-queue__body {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 10px;
+  margin-bottom: 12px;
 }
 
 .mk-p01-queue__count {
@@ -491,17 +524,30 @@ body {
   color: var(--mk-text-secondary);
 }
 
-.mk-p01-queue__bar {
-  flex: 1;
-  height: 6px;
-  background: var(--mk-primary-soft);
+progress.mk-p01-queue__bar {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 8px;
+  border: none;
   border-radius: var(--mk-radius-pill);
   overflow: hidden;
+  background: var(--mk-primary-soft);
+  display: block;
 }
 
-.mk-p01-queue__fill {
-  height: 100%;
-  background: var(--mk-primary);
+progress.mk-p01-queue__bar::-webkit-progress-bar {
+  background-color: var(--mk-primary-soft);
+  border-radius: var(--mk-radius-pill);
+}
+
+progress.mk-p01-queue__bar::-webkit-progress-value {
+  background-color: var(--mk-primary);
+  border-radius: var(--mk-radius-pill);
+}
+
+progress.mk-p01-queue__bar::-moz-progress-bar {
+  background-color: var(--mk-primary);
   border-radius: var(--mk-radius-pill);
 }
 
@@ -544,14 +590,19 @@ body {
 .mk-p01-assistance__btn {
   margin-left: auto;
   font-size: 0.8125rem;
-  font-weight: 600;
-  color: var(--mk-primary);
-  background: var(--mk-primary-soft);
+  font-weight: 700;
+  color: #fff;
+  background: #2563EB;   /* distinct accent, not the emergency-red */
   border: none;
   border-radius: var(--mk-radius-control);
   padding: 8px 16px;
   cursor: pointer;
   min-height: 48px;
+  transition: background-color 0.15s ease-out;
+}
+
+.mk-p01-assistance__btn:hover {
+  background: #1D4ED8;
 }
 
 /* ---- Footer ---- */

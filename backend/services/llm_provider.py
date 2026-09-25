@@ -7,7 +7,7 @@ from typing import Optional, Dict, Any, List, Literal
 
 import httpx
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,11 @@ class GroqProvider(OpenAICompatibleProvider):
     base_url = "https://api.groq.com/openai/v1"
     name = "groq"
 
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None,
+                 base_url: Optional[str] = None, timeout: float = 8.0):
+        # Cap client-side timeout to 8.0s so no primary call silently hangs for 15-18s
+        super().__init__(api_key=api_key, model_name=model_name, base_url=base_url, timeout=timeout)
+
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
         if not self.is_configured():
             raise RuntimeError(f"{self.provider_name} API key is not configured")
@@ -186,6 +191,11 @@ class CerebrasProvider(OpenAICompatibleProvider):
     base_url = "https://api.cerebras.ai/v1"
     name = "cerebras"
 
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None,
+                 base_url: Optional[str] = None, timeout: float = 8.0):
+        # Cap client-side timeout to 8.0s
+        super().__init__(api_key=api_key, model_name=model_name, base_url=base_url, timeout=timeout)
+
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
         if not self.is_configured():
             raise RuntimeError(f"{self.provider_name} API key is not configured")
@@ -202,6 +212,10 @@ class OpenRouterProvider(OpenAICompatibleProvider):
     env_model_key = "OPENROUTER_MODEL"
     base_url = "https://openrouter.ai/api/v1"
     name = "openrouter"
+
+    def __init__(self, api_key: Optional[str] = None, model_name: Optional[str] = None,
+                 base_url: Optional[str] = None, timeout: float = 8.0):
+        super().__init__(api_key=api_key, model_name=model_name, base_url=base_url, timeout=timeout)
 
     async def generate(self, prompt: str, system_prompt: Optional[str] = None, **kwargs) -> Optional[str]:
         if not self.is_configured():
@@ -265,9 +279,10 @@ class GeminiProvider(LLMProvider):
 LLM_CHAIN: List[type] = [GroqProvider, CerebrasProvider, NvidiaNimProvider]
 
 
-def _configured_providers() -> List[LLMProvider]:
+def _configured_providers(chain: Optional[List[type]] = None) -> List[LLMProvider]:
     configured: List[LLMProvider] = []
-    for cls in LLM_CHAIN:
+    target_chain = chain if chain is not None else LLM_CHAIN
+    for cls in target_chain:
         provider = cls()
         if provider.is_configured():
             configured.append(provider)
@@ -304,9 +319,13 @@ def get_llm_provider() -> LLMProvider:
     return configured[0]
 
 
-def iter_llm_providers() -> List[LLMProvider]:
-    """Return all configured providers in priority order."""
-    configured = _configured_providers()
+def iter_llm_providers(language: Optional[str] = None) -> List[LLMProvider]:
+    """Return all configured providers in priority order.
+    For non-English (hi/gu), Cerebras is prioritized first to absorb heavier BPE token costs."""
+    chain = LLM_CHAIN
+    if language in ("hi", "gu"):
+        chain = [CerebrasProvider, GroqProvider, NvidiaNimProvider]
+    configured = _configured_providers(chain=chain)
     if not configured:
         logger.error("No LLM provider configured: %s", provider_diagnostics())
         raise RuntimeError("No LLM provider configured")
@@ -379,10 +398,20 @@ class CaseUpdate(BaseModel):
 
 class NextQuestionProposal(BaseModel):
     model_config = ConfigDict(extra="ignore")
-    text: str
-    target_concept: str
+    text: str = ""
+    target_concept: str = ""
     reason: str = ""
     priority: Literal["high", "normal", "optional"] = "normal"
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if not data.get("text") and data.get("question"):
+                data["text"] = str(data["question"])
+            if not data.get("target_concept"):
+                data["target_concept"] = str(data.get("concept", data.get("target", "symptom")))
+        return data
 
 
 class AdaptiveTurnProposal(BaseModel):
@@ -391,6 +420,19 @@ class AdaptiveTurnProposal(BaseModel):
     next_question: Optional[NextQuestionProposal] = None
     status: Literal["continue", "sufficient", "clarify"] = "continue"
     confidence: float = Field(default=0.85, ge=0.0, le=1.0)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _normalize_status(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "status" in data:
+            st = str(data["status"]).lower().strip()
+            if st in ("incomplete", "in_progress", "followup", "follow_up"):
+                data["status"] = "continue"
+            elif st in ("complete", "finished", "done"):
+                data["status"] = "sufficient"
+            elif st not in ("continue", "sufficient", "clarify"):
+                data["status"] = "continue"
+        return data
 
 
 async def generate_adaptive_turn(
@@ -417,11 +459,13 @@ async def generate_adaptive_turn(
             "elliptical fragment and never drop the subject. Keep all concept keys and JSON in English."
         ),
         "gu": (
-            "The patient's language is Gujarati (gu). Generate next_question.text in simple, "
-            "polite, conversational Gujarati (Gujarati script), as a COMPLETE question starting "
-            "with a question word such as શું, કેટલા, ક્યારે, ક્યાં, કયા, કેવી, કેવું. Never use "
-            "an elliptical fragment (never begin with નથી) and never drop the subject. "
-            "Keep all concept keys and JSON in English."
+            "The patient's language is Gujarati (gu). Generate next_question.text ENTIRELY in Gujarati script "
+            "(Unicode range U+0A80–U+0AFF). Every word of the question must be in Gujarati — "
+            "do NOT mix in English, Roman, Hindi (Devanagari), or transliterated words. "
+            "Write as a COMPLETE question starting with a question word such as "
+            "શું, કેટલા, ક્યારે, ક્યાં, કયા, કેવી, કેવું, કેમ. "
+            "Never use an elliptical fragment. Never begin with a negation. "
+            "Keep all concept keys and JSON field names in English."
         ),
         "en": (
             "The patient's language is English (en). Generate next_question.text in clear, "
@@ -439,54 +483,134 @@ async def generate_adaptive_turn(
             + json.dumps(norm_map)
         )
 
-    system_prompt = (
-        "You are an empathetic, clinical OPD intake conversational interviewer for MediKiosk. "
-        "Your task is to understand the patient's natural language answer, update structured concepts, "
-        "and propose the next most clinically useful follow-up question.\n\n"
-        "STRICT CONVERSATIONAL AND CLINICAL INVARIANTS:\n"
-        "1. NEVER DIAGNOSE. Never suggest a condition, illness, dosha imbalance, or disease name.\n"
-        "2. NEVER PRESCRIBE OR TREAT. Never recommend medicines, herbs, dosages, treatments, or Panchakarma.\n"
-        "3. NEVER ASK FOR A FACT ALREADY SUFFICIENTLY ESTABLISHED. If a concept has a value in collected_concepts, "
-        "do NOT ask for it again unless asking for necessary clarification.\n"
-        "4. TREAT EXPLICIT NEGATIVES AS ESTABLISHED ABSENT FINDINGS. If the patient denies a symptom (e.g. 'no fever', 'no vomiting'), "
-        "record it in denied_concepts and NEVER ask about it again unless clarifying.\n"
-        "5. DO NOT INFER A DIFFERENT BODY SYSTEM WITHOUT EVIDENCE. Ground your interpretation strictly in the patient's words. "
-        "Never convert stomach symptoms into jaw pain, or cough into knee pain.\n"
-        "6. DO NOT CONVERT UNCERTAINTY INTO CERTAINTY. If regional language or statement is ambiguous, ask clarification.\n"
-        "7. ONE CLEAR PATIENT-FRIENDLY QUESTION. Propose exactly ONE question using patient-friendly language.\n"
-        "8. DO NOT EXPOSE INTERNAL CONCEPT NAMES. Never say words like 'laterality', 'functional limitation', 'character', or 'site' directly.\n"
-        "9. CATEGORY COMPATIBILITY. Do not ask pain descriptors (sharp/dull/numbness) on metabolic weakness or fatigue.\n"
-        "10. AYURVEDIC TERMS (e.g., Agni, Ama, Vata) must remain provisional/literature-informed and must never imply disease diagnosis.\n"
-        f"11. LANGUAGE: {lang_instructions}\n"
-        "12. STRUCTURED JSON OUTPUT ONLY. Respond with valid JSON matching:\n"
-        "{\n"
-        '  "case_update": {\n'
-        f'    "presentation": "one of {json.dumps(allowed_domains)}",\n'
-        f'    "concepts": {{ "concept_key": "patient statement" }},\n'
-        '    "denied_concepts": ["denied symptom, e.g. fever, vomiting"],\n'
-        '    "mentioned_documents": ["document mentioned by patient or empty list"]\n'
-        "  },\n"
-        '  "next_question": {\n'
-        '    "text": "The patient-facing question in the requested language",\n'
-        '    "target_concept": "the specific concept being explored",\n'
-        '    "reason": "short clinical reason why this question is helpful",\n'
-        '    "priority": "high|normal|optional"\n'
-        "  },\n"
-        '  "status": "continue|sufficient|clarify",\n'
-        '  "confidence": 0.85\n'
-        "}\n"
-        f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
-        f"13. {denial_hint + ' ' if denial_hint else ''}"
-        f"{normalized_hint + ' ' if normalized_hint else ''}"
-    )
+    # --- Returning patient hint ---
+    visit_type = session_context.get("visit_type", "new")
+    prior_visit = session_context.get("prior_visit_context") or {}
+    returning_hint = ""
+    if visit_type == "returning" and prior_visit:
+        prev_cc = prior_visit.get("chief_complaint", "")
+        prev_domain = prior_visit.get("presentation_domain", "")
+        prev_date = prior_visit.get("visit_date", "")
+        parts = []
+        if prev_cc:
+            parts.append(f"Previous chief complaint: \"{prev_cc}\"")
+        if prev_domain:
+            parts.append(f"Presentation domain: {prev_domain}")
+        if prev_date:
+            parts.append(f"Visit date: {prev_date[:10]}")
+        if parts:
+            returning_hint = (
+                "RETURNING PATIENT — This is a follow-up visit. Prior visit summary: "
+                + "; ".join(parts)
+                + ". "
+                "Acknowledge naturally that this is a return visit ONLY if the patient's answer "
+                "refers to or updates a previous condition. "
+                "Do NOT hard-code a question like 'What has changed since your last visit?' — "
+                "let the conversation flow naturally from what the patient says. "
+                "Do NOT re-ask anything already clearly established from prior context."
+            )
+    elif visit_type == "returning":
+        returning_hint = (
+            "RETURNING PATIENT — No prior completed visit found for this patient code. "
+            "Treat as a new consultation."
+        )
+
+    # For non-English turns (hi/gu), trim session context to counter BPE token expansion
+    trimmed_context = dict(session_context)
+    if language in ("hi", "gu"):
+        if "concept_guidance" in trimmed_context and isinstance(trimmed_context["concept_guidance"], dict):
+            trimmed_context["concept_guidance"] = {
+                k: v for i, (k, v) in enumerate(trimmed_context["concept_guidance"].items()) if i < 2
+            }
+        if "conversation_history" in trimmed_context and isinstance(trimmed_context["conversation_history"], list):
+            trimmed_context["conversation_history"] = trimmed_context["conversation_history"][-2:]
+        # Strip only bulky/low-value fields; keep matched_vernacular_phrases (critical for GU disambiguation)
+        trimmed_context.pop("concept_metadata", None)
+
+        system_prompt = (
+            "You are a clinical OPD intake conversational interviewer for MediKiosk. "
+            "Understand the patient's natural language answer, update structured concepts, "
+            "and propose the next most clinically useful follow-up question.\n\n"
+            "STRICT CONVERSATIONAL AND CLINICAL INVARIANTS:\n"
+            "1. NEVER DIAGNOSE. Never suggest a condition, illness, dosha imbalance, or disease name.\n"
+            "2. NEVER PRESCRIBE OR TREAT. Never recommend medicines, herbs, dosages, treatments, or Panchakarma.\n"
+            "3. NEVER ASK FOR A FACT ALREADY SUFFICIENTLY ESTABLISHED. If a concept has a value in collected_concepts, do NOT re-ask.\n"
+            "4. TREAT EXPLICIT NEGATIVES AS ESTABLISHED ABSENT FINDINGS. Record denied symptoms in denied_concepts.\n"
+            "5. ONE CLEAR PATIENT-FRIENDLY QUESTION. Propose exactly ONE question using patient-friendly language.\n"
+            "6. DO NOT EXPOSE INTERNAL CONCEPT NAMES.\n"
+            f"7. LANGUAGE: {lang_instructions}\n"
+            "8. STRUCTURED JSON OUTPUT ONLY. Respond with valid JSON matching:\n"
+            "{\n"
+            '  "case_update": {\n'
+            f'    "presentation": "one of {json.dumps(allowed_domains)}",\n'
+            f'    "concepts": {{ "concept_key": "patient statement" }},\n'
+            '    "denied_concepts": ["denied symptom, e.g. fever, vomiting"],\n'
+            '    "mentioned_documents": ["document mentioned by patient or empty list"]\n'
+            "  },\n"
+            '  "next_question": {\n'
+            '    "text": "The patient-facing question in the requested language",\n'
+            '    "target_concept": "the specific concept being explored",\n'
+            '    "reason": "short clinical reason why this question is helpful",\n'
+            '    "priority": "high|normal|optional"\n'
+            "  },\n"
+            '  "status": "continue|sufficient|clarify",\n'
+            '  "confidence": 0.85\n'
+            "}\n"
+            f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
+            f"{denial_hint + ' ' if denial_hint else ''}"
+            f"{normalized_hint + ' ' if normalized_hint else ''}"
+            f"{returning_hint + ' ' if returning_hint else ''}"
+        )
+    else:
+        system_prompt = (
+            "You are an empathetic, clinical OPD intake conversational interviewer for MediKiosk. "
+            "Your task is to understand the patient's natural language answer, update structured concepts, "
+            "and propose the next most clinically useful follow-up question.\n\n"
+            "STRICT CONVERSATIONAL AND CLINICAL INVARIANTS:\n"
+            "1. NEVER DIAGNOSE. Never suggest a condition, illness, dosha imbalance, or disease name.\n"
+            "2. NEVER PRESCRIBE OR TREAT. Never recommend medicines, herbs, dosages, treatments, or Panchakarma.\n"
+            "3. NEVER ASK FOR A FACT ALREADY SUFFICIENTLY ESTABLISHED. If a concept has a value in collected_concepts, "
+            "do NOT ask for it again unless asking for necessary clarification.\n"
+            "4. TREAT EXPLICIT NEGATIVES AS ESTABLISHED ABSENT FINDINGS. If the patient denies a symptom (e.g. 'no fever', 'no vomiting'), "
+            "record it in denied_concepts and NEVER ask about it again unless clarifying.\n"
+            "5. DO NOT INFER A DIFFERENT BODY SYSTEM WITHOUT EVIDENCE. Ground your interpretation strictly in the patient's words. "
+            "Never convert stomach symptoms into jaw pain, or cough into knee pain.\n"
+            "6. DO NOT CONVERT UNCERTAINTY INTO CERTAINTY. If regional language or statement is ambiguous, ask clarification.\n"
+            "7. ONE CLEAR PATIENT-FRIENDLY QUESTION. Propose exactly ONE question using patient-friendly language.\n"
+            "8. DO NOT EXPOSE INTERNAL CONCEPT NAMES. Never say words like 'laterality', 'functional limitation', 'character', or 'site' directly.\n"
+            "9. CATEGORY COMPATIBILITY. Do not ask pain descriptors (sharp/dull/numbness) on metabolic weakness or fatigue.\n"
+            "10. AYURVEDIC TERMS (e.g., Agni, Ama, Vata) must remain provisional/literature-informed and must never imply disease diagnosis.\n"
+            f"11. LANGUAGE: {lang_instructions}\n"
+            "12. STRUCTURED JSON OUTPUT ONLY. Respond with valid JSON matching:\n"
+            "{\n"
+            '  "case_update": {\n'
+            f'    "presentation": "one of {json.dumps(allowed_domains)}",\n'
+            f'    "concepts": {{ "concept_key": "patient statement" }},\n'
+            '    "denied_concepts": ["denied symptom, e.g. fever, vomiting"],\n'
+            '    "mentioned_documents": ["document mentioned by patient or empty list"]\n'
+            "  },\n"
+            '  "next_question": {\n'
+            '    "text": "The patient-facing question in the requested language",\n'
+            '    "target_concept": "the specific concept being explored",\n'
+            '    "reason": "short clinical reason why this question is helpful",\n'
+            '    "priority": "high|normal|optional"\n'
+            "  },\n"
+            '  "status": "continue|sufficient|clarify",\n'
+            '  "confidence": 0.85\n'
+            "}\n"
+            f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
+            f"13. {denial_hint + ' ' if denial_hint else ''}"
+            f"{normalized_hint + ' ' if normalized_hint else ''}"
+            f"{returning_hint + ' ' if returning_hint else ''}"
+        )
 
     user_prompt = (
-        f"Current Session Context:\n{json.dumps(session_context, indent=2)}\n\n"
+        f"Current Session Context:\n{json.dumps(trimmed_context, indent=2, ensure_ascii=False)}\n\n"
         "Analyze the patient's current answer, update collected concepts, and propose the next question."
     )
 
     if providers is None:
-        providers = iter_llm_providers()
+        providers = iter_llm_providers(language=language)
 
     last_error: Optional[Exception] = None
     for provider in providers:
@@ -572,14 +696,25 @@ async def correct_adaptive_turn(
         "the single most clinically useful UNASKED concept relevant to this presentation.\n"
     )
 
+    trimmed_context = dict(session_context)
+    if language in ("hi", "gu"):
+        if "concept_guidance" in trimmed_context and isinstance(trimmed_context["concept_guidance"], dict):
+            trimmed_context["concept_guidance"] = {
+                k: v for i, (k, v) in enumerate(trimmed_context["concept_guidance"].items()) if i < 2
+            }
+        if "conversation_history" in trimmed_context and isinstance(trimmed_context["conversation_history"], list):
+            trimmed_context["conversation_history"] = trimmed_context["conversation_history"][-2:]
+        trimmed_context.pop("concept_metadata", None)
+        trimmed_context.pop("matched_vernacular_phrases", None)
+
     user_prompt = (
-        f"Current Session Context:\n{json.dumps(session_context, indent=2)}\n\n"
+        f"Current Session Context:\n{json.dumps(trimmed_context, indent=2, ensure_ascii=False)}\n\n"
         f"Validator Feedback:\n{feedback}\n\n"
         "Return ONLY the corrected JSON proposal."
     )
 
     if providers is None:
-        providers = iter_llm_providers()
+        providers = iter_llm_providers(language=language)
 
     last_error: Optional[Exception] = None
     for provider in providers:

@@ -43,10 +43,10 @@ def test_start_returns_session_id_only(client):
     assert r.status_code == 200
     body = r.json()
     assert "session_id" in body
-    # contract: only session_id, never patient_code / next_question
+    # contract: only session_id + prior_context_loaded, never patient_code / next_question
     assert "patient_code" not in body
     assert "next_question" not in body
-    assert len(body) == 1
+    assert set(body.keys()) <= {"session_id", "prior_context_loaded"}
 
 
 def test_start_requires_patient_and_validates(client):
@@ -306,3 +306,32 @@ def test_db_migration_upgrades_legacy_table(client):
             init_db()
         finally:
             os.environ.pop("DATABASE_PATH", None)
+
+
+def test_patient_lookup_unknown_code(client):
+    """Unknown patient code returns found=False, not a 404 or error."""
+    r = client.get("/session/patient-lookup?code=AIIA-000000-99999")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["found"] is False
+
+
+def test_patient_lookup_invalid_code_rejected(client):
+    """Empty/too-long code (>50 chars) returns 400."""
+    r = client.get("/session/patient-lookup?code=" + "X" * 51)
+    assert r.status_code == 400
+
+
+def test_returning_patient_start_no_prior_session(client):
+    """Starting a returning session without a matching completed visit still works.
+    prior_context_loaded=False and no error is raised."""
+    r = client.post("/session/start", json={
+        "patient": {"name": "Test Patient", "age": 30, "gender": "female"},
+        "language": "en",
+        "visit_type": "returning",
+        "prior_patient_code": "AIIA-000000-99999",
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert "session_id" in body
+    assert body.get("prior_context_loaded") is False
