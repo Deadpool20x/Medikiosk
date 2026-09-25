@@ -2,13 +2,17 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { LifeBuoy } from "lucide-react";
 import { startPatientSession, triggerEmergency } from "../lib/api";
 
 const LANGUAGE_KEY = "medikiosk_preferred_language";
 
+const VISIT_TYPE_KEY = "medikiosk_visit_type";
+
 export default function HomePage() {
   const router = useRouter();
   const [selectedLanguage, setSelectedLanguage] = useState("en");
+  const [visitType, setVisitType] = useState<"new" | "returning">("new");
 
   const languages = [
     { code: "en", label: "English" },
@@ -22,9 +26,8 @@ export default function HomePage() {
   }
 
   function handleContinue() {
-    // P01 -> P02 handoff: persist the chosen language so the session created on
-    // /patient (POST /session/start) carries it. New Patient is the P0 default.
     window.sessionStorage.setItem(LANGUAGE_KEY, selectedLanguage);
+    window.sessionStorage.setItem(VISIT_TYPE_KEY, visitType);
     router.push("/patient");
   }
 
@@ -70,7 +73,7 @@ export default function HomePage() {
           <button
             type="button"
             onClick={handleEmergency}
-            className="mk-p01-header__action mk-emergency-btn"
+            className="mk-btn mk-btn--danger mk-p01-header__action mk-emergency-btn"
             id="mk-always-visible-emergency-btn"
             style={{
               backgroundColor: "#DC2626",
@@ -106,7 +109,7 @@ export default function HomePage() {
       <main className="mk-p01-main">
         <div className="mk-p01-main__left">
           <div className="mk-p01-step">
-            <span className="mk-p01-step__label">STEP 01 / 06 Initialization</span>
+            <span className="mk-p01-step__label">Step 1 of 6 — Initialization</span>
             <div className="mk-p01-step__dots">
               {[1, 2, 3, 4, 5, 6].map((n) => (
                 <span key={n} className={`mk-p01-step__dot ${n <= 1 ? "mk-p01-step__dot--active" : ""} ${n < 1 ? "mk-p01-step__dot--done" : ""}`} />
@@ -123,7 +126,7 @@ export default function HomePage() {
 
           <div className="mk-p01-section">
             <div className="mk-p01-section__header">
-              <h2 className="mk-p01-section__title">1. SELECT PREFERRED LANGUAGE</h2>
+              <h2 className="mk-p01-section__title">1. Select preferred language</h2>
               <span className="mk-p01-section__hint">Audio prompts available</span>
             </div>
             <div className="mk-p01-lang-grid">
@@ -131,7 +134,7 @@ export default function HomePage() {
                 <button
                   key={lang.code}
                   type="button"
-                  className={`mk-p01-lang-card ${selectedLanguage === lang.code ? "mk-p01-lang-card--active" : ""}`}
+                  className={`mk-btn mk-btn--secondary mk-p01-lang-card ${selectedLanguage === lang.code ? "mk-p01-lang-card--active" : ""}`}
                   onClick={() => handleLanguageClick(lang.code)}
                 >
                   <span className="mk-p01-lang-card__code">{lang.code.toUpperCase()}</span>
@@ -143,28 +146,43 @@ export default function HomePage() {
 
           <div className="mk-p01-section">
             <div className="mk-p01-section__header">
-              <h2 className="mk-p01-section__title">2. PATIENT STATUS</h2>
-              <span className="mk-p01-section__hint">First time OPD visit</span>
+              <h2 className="mk-p01-section__title">2. Patient status</h2>
+              <span className="mk-p01-section__hint">First time or returning?</span>
             </div>
             <div className="mk-p01-status-grid">
-              <div className="mk-p01-status-card mk-p01-status-card--active">
+              <button
+                type="button"
+                className={`mk-btn mk-btn--secondary mk-p01-status-card ${visitType === "new" ? "mk-p01-status-card--active" : ""}`}
+                onClick={() => setVisitType("new")}
+                aria-pressed={visitType === "new"}
+              >
                 <span className="mk-p01-status-card__dot" />
                 <div>
                   <span className="mk-p01-status-card__label">New Patient</span>
                   <span className="mk-p01-status-card__sub">First visit</span>
                 </div>
-              </div>
+              </button>
+              <button
+                type="button"
+                className={`mk-btn mk-btn--secondary mk-p01-status-card ${visitType === "returning" ? "mk-p01-status-card--active" : ""}`}
+                onClick={() => setVisitType("returning")}
+                aria-pressed={visitType === "returning"}
+              >
+                <span className="mk-p01-status-card__dot" />
+                <div>
+                  <span className="mk-p01-status-card__label">Returning Patient</span>
+                  <span className="mk-p01-status-card__sub">Previous visit</span>
+                </div>
+              </button>
             </div>
           </div>
 
           <button
             type="button"
-            className="mk-p01-cta"
+            className="mk-btn mk-btn--primary mk-p01-cta"
             onClick={handleContinue}
           >
             Continue to Consent →
-            <span className="mk-p01-cta__status" />
-            <span className="mk-p01-cta__sid">S-1047</span>
           </button>
         </div>
 
@@ -206,22 +224,25 @@ export default function HomePage() {
             <h3 className="mk-p01-queue__title">OPD Queue Status</h3>
             <div className="mk-p01-queue__body">
               <span className="mk-p01-queue__count">12</span>
-              <span className="mk-p01-queue__label">patients waiting</span>
-              <div className="mk-p01-queue__bar">
-                <div className="mk-p01-queue__fill" style={{ width: "65%" }} />
-              </div>
+              <span className="mk-p01-queue__label">of 40 patients waiting · ~15 min est.</span>
             </div>
+            <progress
+              className="mk-p01-queue__bar"
+              value={12}
+              max={40}
+              aria-label="Queue: 12 of 40 patients waiting"
+            />
           </div>
 
           <div className="mk-p01-assistance">
             <div className="mk-p01-assistance__icon">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-5 h-5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
+              <LifeBuoy className="w-5 h-5" aria-hidden="true" />
             </div>
             <div>
               <p className="mk-p01-assistance__title">Assistance</p>
               <p className="mk-p01-assistance__desc">Need help? Connect with a nurse</p>
             </div>
-            <button className="mk-p01-assistance__btn" type="button">Call Nurse</button>
+            <button className="mk-btn mk-p01-assistance__btn" type="button">Call Nurse</button>
           </div>
         </div>
       </main>
@@ -231,7 +252,6 @@ export default function HomePage() {
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 mk-p01-footer__lock"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>
           <span>Secure & Encrypted</span>
         </div>
-        <button className="mk-p01-footer__btn" type="button">Assistance / Call Nurse</button>
       </footer>
     </div>
   );

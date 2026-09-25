@@ -72,10 +72,12 @@ export function PatientFlow() {
   const [name, setName] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState("male");
-  // P01 preferred language handoff: seed from sessionStorage so the sessions
-  // created by POST /session/start carry the language chosen on the landing page.
+  // P01 preferred language & visit_type handoff from sessionStorage
   const [language, setLanguage] = useState(() =>
     typeof window !== "undefined" ? window.sessionStorage.getItem("medikiosk_preferred_language") || "en" : "en"
+  );
+  const [visitType] = useState<"new" | "returning">(() =>
+    typeof window !== "undefined" ? (window.sessionStorage.getItem("medikiosk_visit_type") as "new" | "returning") || "new" : "new"
   );
   const [consentChecked, setConsentChecked] = useState(false);
   const router = useRouter();
@@ -174,7 +176,7 @@ export function PatientFlow() {
     setLoading(true);
     try {
       const patient: Patient = { name: name.trim(), age: Number(age), gender };
-      const res = await startPatientSession(patient, language, "new");
+      const res = await startPatientSession(patient, language, visitType);
       setSessionId(res.session_id);
       window.sessionStorage.setItem(SESSION_KEY, res.session_id);
       setScreen("consent");
@@ -299,7 +301,7 @@ export function PatientFlow() {
           age: Number(age) || 0,
           gender: gender || "other",
         };
-        const res = await startPatientSession(patient, language, "new");
+        const res = await startPatientSession(patient, language, visitType);
         currentSessionId = res.session_id;
         setSessionId(res.session_id);
         window.sessionStorage.setItem(SESSION_KEY, res.session_id);
