@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from backend.models.schema import Session
 from backend.db import get_session, save_session, list_sessions, list_flagged_sessions, list_queued_sessions
 from backend.rules.adaptive_interview import completeness_gaps
+from backend.rules.clinical_review import clinical_mentions
 from backend.services.documents import correct_document
 
 import os
@@ -88,9 +89,11 @@ async def get_doctor_session(session_id: str):
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    # Doctor-facing completeness gaps computed on read (Graph E).
+    # Doctor-facing completeness gaps + term standings, computed on read.
     session.completeness_gaps = completeness_gaps(session)
+    session.clinical_mentions = clinical_mentions(session)
     return session
+
 
 @router.patch("/session/{session_id}", response_model=Session)
 async def patch_doctor_session(session_id: str, patch_data: SessionPatchRequest):
@@ -142,6 +145,7 @@ async def patch_doctor_session(session_id: str, patch_data: SessionPatchRequest)
 
     save_session(session)
     session.completeness_gaps = completeness_gaps(session)
+    session.clinical_mentions = clinical_mentions(session)
     return session
 
 @router.patch("/session/{session_id}/document/{index}", response_model=Session)

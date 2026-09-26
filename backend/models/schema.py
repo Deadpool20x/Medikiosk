@@ -86,6 +86,9 @@ class Session(BaseModel):
     # Doctor-facing completeness gaps, computed on read (never persisted as
     # interview state): [{concept, required}].
     completeness_gaps: List[Dict[str, Any]] = Field(default_factory=list)
+    # Ledger terms mentioned in patient text with review standing
+    # [{term, entry_id, status}]; computed on read.
+    clinical_mentions: List[Dict[str, Any]] = Field(default_factory=list)
     adaptive_question_count: int = Field(default=0)
     mentioned_documents: List[str] = Field(default_factory=list)
     adaptive: bool = Field(default=False)

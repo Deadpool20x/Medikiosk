@@ -13,8 +13,7 @@ import logging
 logger = logging.getLogger("medikiosk.session")
 from backend.rules.adaptive_interview import (
     ALL_DOMAINS,
-    MAX_ADAPTIVE_QUESTIONS,
-    classify_presentation_domain,
+    MAX_ADAPTIVE_QUESTIONS,    classify_presentation_domain,
     extract_mentioned_documents,
     extract_concepts_from_payload,
     extract_concepts_from_text,
@@ -33,6 +32,7 @@ from backend.rules.adaptive_interview import (
     build_conversation_context,
     DOMAIN_GENERAL,
 )
+from backend.rules.clinical_review import clinical_mentions
 from backend.rules.interview_rules import get_next_question, get_field_value, REQUIRED_FIELDS_ORDER
 from backend.rules.safety_rules import evaluate_safety
 from backend.rules.department_rules import classify_department, DEPARTMENT_TOKEN_PREFIX
@@ -263,6 +263,7 @@ class SessionResponse(BaseModel):
     question_source: str = "unknown"
     concept_provenance: Dict[str, Any] = Field(default_factory=dict)
     completeness_gaps: List[Dict[str, Any]] = Field(default_factory=list)
+    clinical_mentions: List[Dict[str, Any]] = Field(default_factory=list)
 
 class PatientLookupResponse(BaseModel):
     found: bool
@@ -533,6 +534,7 @@ async def get_session(session_id: str):
         question_source=getattr(session, "question_source", "unknown"),
         concept_provenance=getattr(session, "concept_provenance", {}) or {},
         completeness_gaps=completeness_gaps(session),
+        clinical_mentions=clinical_mentions(session),
     )
 
 @router.post("/{session_id}/answer", response_model=AnswerResponse)

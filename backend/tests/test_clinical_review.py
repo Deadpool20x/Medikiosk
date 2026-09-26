@@ -5,13 +5,13 @@ Evidence anchors:
 - docs/ayurvedic/clinician_review_results_v1.md §6.A (empty until sign-off)
 """
 import re
+from types import SimpleNamespace
 
 from backend.rules.clinical_review import (
     CONTESTED_CORRELATES,
     get_entry,
     is_patient_usable,
-    is_reviewed,
-    ledger_items,
+    is_reviewed,    ledger_items,
     load_ledger,
     required_history,
     reviewed_count,
@@ -88,3 +88,111 @@ def test_term_lookup_by_id():
     assert entry["concept"] == "Kasa"
     assert entry["review_status"] == "provisional"
     assert get_entry("NOPE") is None
+
+
+# ---------------------------------------------------------------------------
+# Graph B/D: governance enforcement — provisional can never silently become
+# authoritative; unsupported can never become a patient-facing label.
+# ---------------------------------------------------------------------------
+
+def _proposal(text, concept):
+    return SimpleNamespace(
+        case_update=SimpleNamespace(concepts={}),
+        next_question=SimpleNamespace(text=text, target_concept=concept,
+                                      reason="r", priority="normal"),
+        status="continue",
+    )
+
+
+def _sess():
+    from backend.rules.adaptive_interview import DOMAIN_DIGESTIVE
+    return SimpleNamespace(
+        presentation_domain=DOMAIN_DIGESTIVE, collected_concepts={},
+        asked_concepts=["primary_symptom"], asked_questions=[],
+        adaptive_question_count=1, denied_concepts=[], language="en")
+
+
+def test_validator_rejects_contested_disease_labels():
+    from backend.rules.adaptive_interview import validate_llm_proposal
+    for text in ["Do you suffer from amlapitta after meals?",
+                 "Is this amavata joint pain worse in the morning?",
+                 "Could this be tamaka shwasa at night?",
+                 "Have you been told you have sandhigata vata?",
+                 "Is the grudhrasi pain radiating down your leg?"]:
+        result = validate_llm_proposal(_proposal(text, "associated_symptoms"), _sess(), "digestive")
+        assert result.valid is False, text
+        assert any("unvalidated clinical label" in r for r in result.reasons), text
+
+
+def test_validator_accepts_plain_feature_language():
+    from backend.rules.adaptive_interview import validate_llm_proposal
+    result = validate_llm_proposal(
+        _proposal("Do sour burps come after meals or on an empty stomach?",
+                  "food_relationship"),
+        _sess(), "digestive")
+    assert result.valid is True, result.reasons
+
+
+def test_hypothetical_approval_leaves_real_ledger_untouched():
+    from backend.rules.clinical_review import apply_review, load_ledger
+    import copy
+    draft = copy.deepcopy(load_ledger())
+    updated = apply_review(draft, "T-GI-08", decision="CONFIRMED",
+                           reviewer="Dr. Example, BAMS", date="2026-09-27",
+                           notes="ok for test", final_wording="Amlapitta (test wording)")
+    assert is_reviewed("T-GI-08") is False  # real ledger untouched
+    assert reviewed_count() == 0
+    approved = next(i for i in updated["items"] if i["id"] == "T-GI-08")
+    assert approved["reviewer"] == "Dr. Example, BAMS"
+    assert approved["accepted_terminology"] == "Amlapitta (test wording)"
+    # input mapping not mutated
+    assert draft["items"][7]["reviewer"] is None
+
+
+def test_rejected_and_revised_are_representable():
+    from backend.rules.clinical_review import apply_review, load_ledger
+    import copy
+    draft = copy.deepcopy(load_ledger())
+    updated = apply_review(draft, "T-MS-01", decision="REJECTED",
+                           reviewer="Dr. Example, BAMS", date="2026-09-27")
+    entry = next(i for i in updated["items"] if i["id"] == "T-MS-01")
+    assert entry["review_decision"] == "REJECTED"
+    assert entry["review_status"] == "provisional"  # never silently confirmed
+
+
+def test_no_review_record_without_explicit_evidence():
+    from backend.rules.clinical_review import apply_review, load_ledger
+    import copy
+    import pytest
+    draft = copy.deepcopy(load_ledger())
+    with pytest.raises(ValueError):
+        apply_review(draft, "T-GI-01", decision="CONFIRMED", reviewer="", date="2026-09-27")
+    with pytest.raises(ValueError):
+        apply_review(draft, "T-GI-01", decision="CONFIRMED", reviewer="Dr X", date="")
+    with pytest.raises(ValueError):
+        apply_review(draft, "T-GI-01", decision="MAYBE", reviewer="Dr X", date="2026-09-27")
+    with pytest.raises(ValueError):
+        apply_review(draft, "NOPE", decision="CONFIRMED", reviewer="Dr X", date="2026-09-27")
+
+
+def test_insufficient_status_fails_safely():
+    # Code paths asking "may this term label the patient?" get a hard no.
+    for term in ["amlapitta", "vatarakta", "kshayaja kasa"]:
+        assert not is_patient_usable(term)
+
+
+def test_safety_gate_needs_no_ledger():
+    # Graph F: emergency behavior is independent of review state, even when
+    # the ledger itself is unreadable.
+    from unittest.mock import patch
+    from backend.rules import safety_rules, clinical_review
+    from backend.models.schema import Session, Patient, HistoryOfPresentIllness, DoctorReview
+
+    def blank():
+        return Session(session_id="x", patient=Patient(name="P", age=30, gender="m"),
+                       history_of_present_illness=HistoryOfPresentIllness(),
+                       doctor_review=DoctorReview())
+
+    with patch.object(clinical_review, "load_ledger", side_effect=RuntimeError("ledger gone")):
+        assert safety_rules.evaluate_safety("severe chest pain", blank()).flagged is True
+        assert clinical_review.clinical_mentions(blank()) == []

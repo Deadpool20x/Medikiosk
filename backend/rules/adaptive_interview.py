@@ -937,6 +937,19 @@ def validate_llm_proposal(
             reasons.append(f"Question violates clinical scope ban (matched prohibited pattern: {pattern})")
             break
 
+    # Check D2: Unvalidated clinical labels (governance enforcement).
+    # Contested Ayurvedic disease correlates (ledger status provisional,
+    # zero reviewed) must never appear as patient-facing labels until a
+    # clinician resolves them. Plain feature language is unaffected.
+    from backend.rules.clinical_review import CONTESTED_CORRELATES
+    for label in CONTESTED_CORRELATES:
+        if re.search(r"\b" + re.escape(label) + r"\b", q_lower):
+            reasons.append(
+                f"Question uses unvalidated clinical label '{label}' "
+                "(requires clinician review)"
+            )
+            break
+
     # Check B: Concept Relevance
     domain = current_domain or getattr(session_like, "presentation_domain", None) or DOMAIN_GENERAL
     knowledge = get_domain_knowledge(domain)

@@ -83,3 +83,111 @@ def required_history(domain: str) -> List[Dict[str, Any]]:
 
 def reviewed_count() -> int:
     return sum(1 for i in ledger_items() if is_reviewed(i.get("id", "")))
+
+
+# ---------------------------------------------------------------------------
+# Graph G: clinician review import contract.
+# ---------------------------------------------------------------------------
+# A future real review moves PROVISIONAL -> CONFIRMED / REJECTED / REVISED
+# through apply_review() on a ledger mapping. It validates the minimum
+# record the packet requires (decision + reviewer + date) and returns a NEW
+# mapping; the shipped ledger file is never mutated implicitly. No fake
+# values are populated anywhere in this repository.
+
+REVIEW_DECISIONS = ("CONFIRMED", "REJECTED", "REVISED")
+
+
+def apply_review(
+    ledger: Dict[str, Any],
+    entry_id: str,
+    *,
+    decision: str,
+    reviewer: str,
+    date: str,
+    notes: str = "",
+    final_wording: str = "",
+) -> Dict[str, Any]:
+    """Record one clinician decision, returning an updated ledger copy.
+
+    Raises ValueError when the record is incomplete (unknown id, bad
+    decision, missing reviewer/date). The caller's mapping is not mutated.
+    """
+    if decision not in REVIEW_DECISIONS:
+        raise ValueError(f"decision must be one of {REVIEW_DECISIONS}")
+    if not (reviewer or "").strip():
+        raise ValueError("reviewer identity is required; no anonymous sign-off")
+    if not (date or "").strip():
+        raise ValueError("review date is required")
+    items = [dict(i) for i in ledger.get("items", [])]
+    for item in items:
+        if item.get("id") == entry_id:
+            item["review_status"] = "reviewed" if decision == "CONFIRMED" else "provisional"
+            item["review_decision"] = decision
+            item["reviewer"] = reviewer.strip()
+            item["review_date"] = date.strip()
+            if notes:
+                item["notes"] = ((item.get("notes") or "") + f" | Review: {notes}").strip(" |")
+            if final_wording:
+                item["accepted_terminology"] = final_wording
+            return {**ledger, "items": items}
+    raise ValueError(f"unknown ledger entry: {entry_id}")
+
+
+# ---------------------------------------------------------------------------
+# Graphs C/E: clinical term mentions in a session (status visibility).
+# ---------------------------------------------------------------------------
+# Distinct dimensions, never mixed:
+#   concept_provenance[concept].source  -> HOW the value was obtained
+#                                          (llm | heuristic | patient_raw | clinician-entered)
+#   clinical_mentions[].status          -> WHAT clinicians have said about
+#                                          the term (reviewed | provisional)
+# source=llm + status=provisional is the normal, honest combination.
+
+_MENTION_MIN_LEN = 3
+
+
+def _mention_terms() -> List[Dict[str, Any]]:
+    terms = []
+    for item in ledger_items():
+        concept = (item.get("concept") or "").strip()
+        if len(concept) >= _MENTION_MIN_LEN:
+            terms.append({"term": concept, "id": item.get("id", ""),
+                          "status": item.get("review_status", "provisional")})
+    return terms
+
+
+def clinical_mentions(session_like: Any) -> List[Dict[str, Any]]:
+    """Ledger terms appearing in patient text (Graph C/E transparency).
+
+    Scans raw answers, chief complaint, and collected values for whole-word
+    mentions of ledger concepts and reports each term's review standing, so
+    doctor-facing views can show WHAT was said alongside WHETHER clinicians
+    have validated the term. Generic intake vocabulary is unaffected.
+    """
+    import re
+
+    texts: List[str] = []
+    for raw in getattr(session_like, "raw_answers", []) or []:
+        if isinstance(raw, dict) and raw.get("answer"):
+            texts.append(str(raw["answer"]))
+    if getattr(session_like, "chief_complaint", None):
+        texts.append(str(session_like.chief_complaint))
+    for v in (getattr(session_like, "collected_concepts", {}) or {}).values():
+        if v:
+            texts.append(str(v) if not isinstance(v, list) else " ".join(map(str, v)))
+    blob = "\n".join(texts)
+    if not blob.strip():
+        return []
+    seen = set()
+    out = []
+    try:
+        terms = _mention_terms()
+    except Exception:
+        return []  # ledger unreadable: views stay alive, safety never depends on this
+    for t in terms:
+        if t["id"] in seen:
+            continue
+        if re.search(r"\b" + re.escape(t["term"]) + r"\b", blob, re.IGNORECASE):
+            seen.add(t["id"])
+            out.append({"term": t["term"], "entry_id": t["id"], "status": t["status"]})
+    return out

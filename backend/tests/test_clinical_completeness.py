@@ -223,6 +223,97 @@ def test_ocr_and_verbal_information_coexist_without_overwrite():
         tmp.cleanup()
 
 # --- Graph H: adversarial ---------------------------------------------------
+# Governance subset: patient disease-term use, LLM label inference attempts.
+
+def test_patient_disease_term_preserved_without_system_assertion():
+    """Patient says 'I have amlapitta': raw meaning preserved, domain routes
+    on the trigger, but the system never echoes it as a diagnosis and the
+    mention is flagged provisional for the doctor."""
+    from backend.rules.clinical_review import CONTESTED_CORRELATES
+    c, tmp = _client()
+    try:
+        sid = _start_consent_code(c)
+        with patch.object(session_router, "generate_adaptive_turn",
+                          new=AsyncMock(side_effect=RuntimeError("down"))):
+            r = c.post(f"/session/{sid}/answer",
+                       json={"answer": "I have amlapitta, with burning after meals."})
+        assert r.status_code == 200
+        assert r.json()["red_flag"] is False
+        g = c.get(f"/session/{sid}").json()
+        assert g["presentation_domain"] == "digestive"
+        assert g["raw_answers"][-1]["answer"] == "I have amlapitta, with burning after meals."
+        q = (g["next_question"] or "").lower()
+        assert not any(cor in q for cor in CONTESTED_CORRELATES)
+        mentions = {m["term"].lower(): m["status"] for m in g["clinical_mentions"]}
+        assert mentions.get("amlapitta") == "provisional"
+    finally:
+        os.environ.pop("DATABASE_PATH", None)
+        tmp.cleanup()
+
+
+def test_llm_contested_label_proposal_rejected_to_fallback():
+    """LLM tries 'Do you have amlapitta?' -> validator blocks -> deterministic
+    fallback question, honestly labeled, with no contested label shown."""
+    from backend.rules.clinical_review import CONTESTED_CORRELATES
+    c, tmp = _client()
+    try:
+        sid = _start_consent_code(c)
+        with patch.object(session_router, "generate_adaptive_turn",
+                          new=AsyncMock(return_value=_llm(
+                              {}, "Do you have amlapitta after meals?",
+                              "food_relationship"))), \
+             patch.object(session_router, "correct_adaptive_turn",
+                          new=AsyncMock(return_value=None)):
+            r = c.post(f"/session/{sid}/answer",
+                       json={"answer": "My stomach burns after eating."})
+        assert r.status_code == 200
+        assert r.json()["question_source"] == "fallback_generated"
+        q = (r.json()["next_question"] or "").lower()
+        assert not any(cor in q for cor in CONTESTED_CORRELATES)
+    finally:
+        os.environ.pop("DATABASE_PATH", None)
+        tmp.cleanup()
+
+
+def test_returning_conflict_applies_richer_update_with_provenance():
+    """Old prior 'two months' vs new 'started only yesterday': the richer
+    update wins, provenance is kept, nothing is silently merged."""
+    c, tmp = _client()
+    try:
+        prior = c.post("/session/start", json={
+            "patient": {"name": "R", "age": 40, "gender": "male"},
+            "language": "en", "visit_type": "new"}).json()["session_id"]
+        c.post(f"/session/{prior}/consent", json={"consent_given": True})
+        code = c.post(f"/session/{prior}/patient-code").json()["patient_code"]
+        with patch.object(session_router, "generate_adaptive_turn",
+                          new=AsyncMock(side_effect=RuntimeError("down"))):
+            for a in ["Lower back pain for two months.", "Left side.", "Stairs.",
+                      "Stiff mornings.", "Disturbs work."]:
+                c.post(f"/session/{prior}/answer", json={"answer": a})
+            c.post(f"/session/{prior}/documents-complete")
+        sid = c.post("/session/start", json={
+            "patient": {"name": "R", "age": 40, "gender": "male"},
+            "language": "en", "visit_type": "returning",
+            "prior_patient_code": code}).json()["session_id"]
+        c.post(f"/session/{sid}/consent", json={"consent_given": True})
+        c.post(f"/session/{sid}/patient-code")
+        with patch.object(session_router, "generate_adaptive_turn",
+                          new=AsyncMock(side_effect=RuntimeError("down"))):
+            c.post(f"/session/{sid}/answer",
+                   json={"answer": "This episode started yesterday and has been going on for two days."})
+        g = c.get(f"/session/{sid}").json()
+        assert g["collected_concepts"]["onset"] == "yesterday"
+        assert g["collected_concepts"]["duration"] == "two days"
+        assert "duration" in g["concept_provenance"]
+        # prior visit untouched
+        from backend.db import get_session as _get
+        import os as _os
+        old = _get(prior, db_path=_os.environ.get("DATABASE_PATH"))
+        assert old.collected_concepts.get("duration") == "two months"
+    finally:
+        os.environ.pop("DATABASE_PATH", None)
+        tmp.cleanup()
+
 
 def test_ambiguous_ayurvedic_term_is_not_forced():
     # "vata" alone must not hijack domain or concepts; raw preserved by caller.
