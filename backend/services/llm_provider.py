@@ -486,6 +486,14 @@ async def generate_adaptive_turn(
     # --- Returning patient hint ---
     visit_type = session_context.get("visit_type", "new")
     prior_visit = session_context.get("prior_visit_context") or {}
+    # --- Opening turn: session just started, no patient answer exists yet ---
+    opening_hint = ""
+    if session_context.get("opening_turn"):
+        opening_hint = (
+            "OPENING TURN — The interview is just starting and the patient has not "
+            "answered anything yet (current_answer is empty). Ask the single most useful "
+            "opening question for this visit. "
+        )
     returning_hint = ""
     if visit_type == "returning" and prior_visit:
         prev_cc = prior_visit.get("chief_complaint", "")
@@ -557,6 +565,7 @@ async def generate_adaptive_turn(
             '  "confidence": 0.85\n'
             "}\n"
             f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
+            f"{opening_hint + ' ' if opening_hint else ''}"
             f"{denial_hint + ' ' if denial_hint else ''}"
             f"{normalized_hint + ' ' if normalized_hint else ''}"
             f"{returning_hint + ' ' if returning_hint else ''}"
@@ -599,6 +608,7 @@ async def generate_adaptive_turn(
             '  "confidence": 0.85\n'
             "}\n"
             f"Allowed concept keys: {json.dumps(allowed_concepts)}.\n"
+            f"{opening_hint + ' ' if opening_hint else ''}"
             f"13. {denial_hint + ' ' if denial_hint else ''}"
             f"{normalized_hint + ' ' if normalized_hint else ''}"
             f"{returning_hint + ' ' if returning_hint else ''}"

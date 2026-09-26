@@ -43,10 +43,13 @@ def test_start_returns_session_id_only(client):
     assert r.status_code == 200
     body = r.json()
     assert "session_id" in body
-    # contract: only session_id + prior_context_loaded, never patient_code / next_question
+    # contract: only session_id + prior_context_loaded + question_source telemetry,
+    # never patient_code / next_question
     assert "patient_code" not in body
     assert "next_question" not in body
-    assert set(body.keys()) <= {"session_id", "prior_context_loaded"}
+    assert set(body.keys()) <= {"session_id", "prior_context_loaded", "question_source"}
+    # no provider keys in this env -> deterministic fallback Q1, honestly labeled
+    assert body["question_source"] == "fallback_generated"
 
 
 def test_start_requires_patient_and_validates(client):
@@ -334,4 +337,110 @@ def test_returning_patient_start_no_prior_session(client):
     assert r.status_code == 200
     body = r.json()
     assert "session_id" in body
-    assert body.get("prior_context_loaded") is False
+
+
+def _llm_opening(text="What brings you in today, in your own words?",
+                 concept="primary_symptom", provider="stub-llm"):
+    return {
+        "case_update": {"presentation": "general", "concepts": {},
+                        "denied_concepts": [], "mentioned_documents": []},
+        "next_question": {"text": text, "target_concept": concept,
+                          "reason": "opening", "priority": "high"},
+        "status": "continue", "confidence": 0.9, "provider": provider,
+    }
+
+
+def test_q1_llm_generated_on_normal_path(client):
+    """A/B PATH A: accepted LLM proposal becomes persisted Q1, labeled llm_generated."""
+    with patch.object(session_router, "generate_adaptive_turn",
+                      new=AsyncMock(return_value=_llm_opening())):
+        r = _start(client)
+    assert r.status_code == 200
+    assert r.json()["question_source"] == "llm_generated"
+    sid = r.json()["session_id"]
+    s = client.get(f"/session/{sid}").json()
+    assert s["next_question"] == "What brings you in today, in your own words?"
+    assert s["question_source"] == "llm_generated"
+
+
+def test_q1_fallback_only_on_provider_failure(client):
+    """A/B failure path: provider failure -> deterministic fallback, honestly labeled."""
+    with patch.object(session_router, "generate_adaptive_turn",
+                      new=AsyncMock(side_effect=RuntimeError("provider down"))):
+        r = _start(client)
+    assert r.status_code == 200
+    assert r.json()["question_source"] == "fallback_generated"
+    sid = r.json()["session_id"]
+    s = client.get(f"/session/{sid}").json()
+    assert s["next_question"]
+    assert s["question_source"] == "fallback_generated"
+
+
+def test_q1_invalid_proposal_falls_back(client):
+    """A/B invalid path: LLM proposes an empty question -> correction fails -> fallback."""
+    bad = _llm_opening(text="", concept="primary_symptom")
+    with patch.object(session_router, "generate_adaptive_turn",
+                      new=AsyncMock(return_value=bad)), \
+         patch.object(session_router, "correct_adaptive_turn",
+                      new=AsyncMock(return_value=None)):
+        r = _start(client)
+    assert r.status_code == 200
+    assert r.json()["question_source"] == "fallback_generated"
+
+
+def test_q1_returning_uses_prior_context(client):
+    """A/B PATH B: returning Q1 is LLM-generated with prior context in the prompt."""
+    seen = {}
+
+    async def spy_turn(context):
+        seen["visit_type"] = context.get("visit_type")
+        seen["prior"] = context.get("prior_visit_context")
+        seen["opening"] = context.get("opening_turn")
+        return _llm_opening(text="How has your back pain changed since your last visit?",
+                            concept="severity")
+
+    with patch.object(session_router, "generate_adaptive_turn", new=spy_turn):
+        r = client.post("/session/start", json={
+            "patient": {"name": "Returner", "age": 50, "gender": "male"},
+            "language": "en",
+            "visit_type": "returning",
+            "prior_patient_code": "AIIA-000000-99999",
+        })
+    assert r.status_code == 200
+    assert r.json()["question_source"] == "llm_generated"
+    assert seen["visit_type"] == "returning"
+    assert seen["opening"] is True
+    assert r.json()["prior_context_loaded"] is False
+
+
+def test_answer_about_other_concept_is_not_misfiled(client):
+    """LLM returns severity concepts while the pending question targeted
+    food_relationship: the raw severity answer must NOT be stored as
+    food_relationship (which would wrongly suppress that concept later)."""
+    sid = _start_and_consent(client)
+    client.post(f"/session/{sid}/patient-code")
+    # Drive to a food_relationship pending question via the deterministic path.
+    with patch.object(session_router, "generate_adaptive_turn",
+                      new=AsyncMock(side_effect=RuntimeError("LLM down"))):
+        client.post(f"/session/{sid}/answer", json={"answer": "Stomach burning."})
+        client.post(f"/session/{sid}/answer", json={"answer": "For two weeks."})
+    from backend.db import get_session as _get
+    import os as _os
+    s = _get(sid, db_path=_os.environ.get("DATABASE_PATH"))
+    pending = s.asked_concepts[-1]
+    assert pending == "food_relationship"
+    with patch.object(session_router, "generate_adaptive_turn",
+                      new=AsyncMock(return_value={
+                          "case_update": {"presentation": "digestive",
+                                          "concepts": {"severity": "severe"},
+                                          "denied_concepts": [], "mentioned_documents": []},
+                          "next_question": {"text": "How long have you noticed these digestive symptoms?",
+                                            "target_concept": "duration",
+                                            "reason": "need duration", "priority": "high"},
+                          "status": "continue", "confidence": 0.9, "provider": "stub",
+                      })):
+        r = client.post(f"/session/{sid}/answer", json={"answer": "It is severe."})
+    assert r.status_code == 200
+    s2 = _get(sid, db_path=_os.environ.get("DATABASE_PATH"))
+    assert s2.collected_concepts.get("severity") == "severe"
+    assert "food_relationship" not in s2.collected_concepts

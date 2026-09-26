@@ -1548,6 +1548,34 @@ def extract_concepts_from_text(text: str, domain: Optional[str] = None) -> Dict[
     elif "stairs" in lower or "દાદર" in text or "सीढ़ियां" in text or "सीढ़ी" in text:
         extracted["aggravating_factors"] = "stairs / climbing"
 
+    # 5b. Reversed trigger order: "<trigger> makes it worse / worsens it".
+    # e.g. "spicy food makes it worse", "climbing stairs worsens the pain".
+    # Negated triggers ("spicy food does not make it worse") are skipped so a
+    # denial is never persisted as a positive finding.
+    _NEGATED_TRIGGER = re.search(
+        r"\b(?:doesn'?t|does not|don'?t|do not|never|no longer)\b[^.]{0,30}?\b(?:make|makes|worsen|worsens|aggravate|affect|change)\b",
+        lower,
+    )
+    _FOOD_WORDS = ("spicy", "oily", "fried", "food", "meal", "meals", "eating",
+                   "milk", "tea", "coffee", "sour", "sweet", "empty stomach")
+    if not _NEGATED_TRIGGER:
+        rev_match = re.search(
+            r"\b([a-z][a-z\s]{2,40}?)\s+(?:makes?\s+(?:it|this|them|my\s+\w+|the\s+(?:pain|burning|problem|symptoms?))\s+worse|(?:worsens?|aggravates?)\s+(?:it|this|them|my\s+\w+|the\s+(?:pain|burning|problem|symptoms?)))\b",
+            lower,
+        )
+        if rev_match:
+            trigger = rev_match.group(1).strip()
+            # Keep only the final clause ("a for weeks and spicy food" -> "spicy food")
+            trigger = [p for p in re.split(r"[,;]|\band\b", trigger) if p.strip()][-1].strip() \
+                if re.search(r"[,;]|\band\b", trigger) else trigger
+            trigger = re.sub(r"^(?:and|that|because|when|after)\s+", "", trigger)
+            if trigger:
+                if any(w in trigger for w in _FOOD_WORDS):
+                    if "food_relationship" not in extracted:
+                        extracted["food_relationship"] = trigger
+                elif "aggravating_factors" not in extracted:
+                    extracted["aggravating_factors"] = trigger
+
     # 6. Food relationship (Digestive)
     if re.search(r"\b(?:after meals?|on empty stomach|with spicy food|after eating)\b", lower):
         food_match = re.search(r"\b(?:after meals?|on empty stomach|with spicy food|after eating)\b", lower)

@@ -2,6 +2,7 @@
 
 import { useRef, useState, useCallback } from "react";
 import { uploadDocument, correctDocument } from "../lib/api";
+import { pt } from "../lib/i18n";
 
 type Stage = "idle" | "selected" | "processing" | "extracted" | "review" | "error";
 
@@ -18,25 +19,27 @@ interface DocResult {
   file: File;
 }
 
-const FIELD_META: Array<{ key: keyof Omit<DocResult, "file" | "confidence" | "needs_review">; label: string }> = [
-  { key: "medicine", label: "Medicine" },
-  { key: "strength", label: "Strength" },
-  { key: "dose", label: "Dose" },
-  { key: "frequency", label: "Frequency" },
+const FIELD_META: Array<{ key: keyof Omit<DocResult, "file" | "confidence" | "needs_review">; langKey: "d_med" | "d_strength" | "d_dose" | "d_freq" }> = [
+  { key: "medicine", langKey: "d_med" },
+  { key: "strength", langKey: "d_strength" },
+  { key: "dose", langKey: "d_dose" },
+  { key: "frequency", langKey: "d_freq" },
 ];
 
-function confidenceLabel(c: number) {
-  return c >= 0.5 ? "High" : "Low";
+function confidenceLabel(lang: string, c: number) {
+  return pt(lang, c >= 0.5 ? "d_high" : "d_low");
 }
 
 export function DocumentUpload({
   sessionId,
   onContinue,
   onSkip,
+  language = "en",
 }: {
   sessionId: string;
   onContinue: () => void;
   onSkip: () => void;
+  language?: string;
 }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -56,11 +59,11 @@ export function DocumentUpload({
     setError(null);
     if (!f) return;
     if (!ACCEPTED.includes(f.type)) {
-      setError("Unsupported file type. Please upload an image (JPEG, PNG, WEBP, GIF, or TIFF).");
+      setError(pt(language, "d_badtype"));
       return;
     }
     if (f.size > MAX_BYTES) {
-      setError("The uploaded file is too large (maximum 8 MB).");
+      setError(pt(language, "d_toolarge"));
       return;
     }
     setFile(f);
@@ -153,12 +156,11 @@ export function DocumentUpload({
     <>
       <div className="mk-p06-title">
         <div className="mk-p06-title__row">
-          <span className="mk-p06-eyebrow">OPTIONAL MEDICAL RECORDS</span>
+          <span className="mk-p06-eyebrow">{pt(language, "d_eyebrow")}</span>
         </div>
-        <h1 className="mk-p06-h1">Upload an existing medical document</h1>
+        <h1 className="mk-p06-h1">{pt(language, "d_title")}</h1>
         <p className="mk-p06-sub">
-          If you have a previous prescription, medical report, or discharge summary, you can add
-          it to help prepare your consultation.
+          {pt(language, "d_sub")}
         </p>
       </div>
 
@@ -167,8 +169,8 @@ export function DocumentUpload({
         {(stage === "idle" || stage === "error") && (
           <>
             <div className="mk-p06-doc-header">
-              <span className="mk-p06-doc-header__label">Uploaded Document</span>
-              <span className="mk-p06-doc-header__types">Prescription • Medical Report • Discharge Summary</span>
+              <span className="mk-p06-doc-header__label">{pt(language, "d_uploaded")}</span>
+              <span className="mk-p06-doc-header__types">{pt(language, "d_types")}</span>
             </div>
             <button
               type="button"
@@ -184,13 +186,13 @@ export function DocumentUpload({
                   <path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
                 </svg>
               </span>
-              <span className="mk-p06-dropzone__title">Choose a document to upload</span>
-              <span className="mk-p06-dropzone__sub">JPEG, PNG, WEBP, GIF or TIFF — up to 8 MB</span>
+              <span className="mk-p06-dropzone__title">{pt(language, "d_choose")}</span>
+              <span className="mk-p06-dropzone__sub">{pt(language, "d_formats")}</span>
             </button>
             {error && <div className="mk-p06-error" role="alert">{error}</div>}
             {stage === "error" && (
               <button type="button" className="mk-p06-retry-btn" onClick={handleRetry}>
-                Retry upload
+                {pt(language, "d_retry")}
               </button>
             )}
           </>
@@ -200,8 +202,8 @@ export function DocumentUpload({
         {stage === "selected" && file && (
           <>
             <div className="mk-p06-doc-header">
-              <span className="mk-p06-doc-header__label">Uploaded Document</span>
-              <span className="mk-p06-doc-header__types">Prescription • Medical Report • Discharge Summary</span>
+              <span className="mk-p06-doc-header__label">{pt(language, "d_uploaded")}</span>
+              <span className="mk-p06-doc-header__types">{pt(language, "d_types")}</span>
             </div>
             <div className="mk-p06-file-box">
               <div className="mk-p06-file-box__left">
@@ -217,8 +219,8 @@ export function DocumentUpload({
                 </div>
               </div>
               <div className="mk-p06-file-box__actions">
-                <button type="button" className="mk-p06-file-box__cancel" onClick={resetUpload}>Cancel</button>
-                <button type="button" className="mk-p06-file-box__upload" onClick={() => analyze(file)}>Upload</button>
+                <button type="button" className="mk-p06-file-box__cancel" onClick={resetUpload}>{pt(language, "d_cancel")}</button>
+                <button type="button" className="mk-p06-file-box__upload" onClick={() => analyze(file)}>{pt(language, "d_upload")}</button>
               </div>
             </div>
           </>
@@ -228,8 +230,8 @@ export function DocumentUpload({
         {stage === "processing" && (
           <div className="mk-p06-processing">
             <span className="mk-p06-spinner" aria-hidden="true" />
-            <p className="mk-p06-processing__title">Reading your document…</p>
-            <p className="mk-p06-processing__sub">Medication details are extracted privately and organized for your doctor.</p>
+            <p className="mk-p06-processing__title">{pt(language, "d_reading_t")}</p>
+            <p className="mk-p06-processing__sub">{pt(language, "d_reading_s")}</p>
           </div>
         )}
 
@@ -238,8 +240,8 @@ export function DocumentUpload({
           <>
             {/* File presentation box */}
             <div className="mk-p06-doc-header">
-              <span className="mk-p06-doc-header__label">Uploaded Document</span>
-              <span className="mk-p06-doc-header__types">Prescription • Medical Report • Discharge Summary</span>
+              <span className="mk-p06-doc-header__label">{pt(language, "d_uploaded")}</span>
+              <span className="mk-p06-doc-header__types">{pt(language, "d_types")}</span>
             </div>
             <div className="mk-p06-file-box">
               <div className="mk-p06-file-box__left">
@@ -253,12 +255,12 @@ export function DocumentUpload({
                   <div className="mk-p06-file-box__name-row">
                     <span className="mk-p06-file-box__name">{activeDoc.file.name}</span>
                     {activeDoc.needs_review && (
-                      <span className="mk-p06-badge mk-p06-badge--review">Needs Review</span>
+                      <span className="mk-p06-badge mk-p06-badge--review">{pt(language, "d_needs_review")}</span>
                     )}
-                    <span className="mk-p06-badge mk-p06-badge--uploaded">Uploaded</span>
+                    <span className="mk-p06-badge mk-p06-badge--uploaded">{pt(language, "d_uploaded_badge")}</span>
                   </div>
                   <span className="mk-p06-file-box__detail">
-                    {activeDoc.file.type} • {(activeDoc.file.size / (1024 * 1024)).toFixed(1)} MB • Analyzed via OCR
+                    {activeDoc.file.type} • {(activeDoc.file.size / (1024 * 1024)).toFixed(1)} MB • {pt(language, "d_analyzed")}
                   </span>
                 </div>
               </div>
@@ -267,9 +269,9 @@ export function DocumentUpload({
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p06-file-box__replace-icon">
                     <path d="M21 2v6h-6" /><path d="M3 12a9 9 0 0 1 15-6.7L21 8" /><path d="M3 22v-6h6" /><path d="M21 12a9 9 0 0 1-15 6.7L3 16" />
                   </svg>
-                  Replace file
+                  {pt(language, "d_replace")}
                 </button>
-                <button type="button" className="mk-p06-file-box__delete" onClick={resetUpload} aria-label="Remove document">
+                <button type="button" className="mk-p06-file-box__delete" onClick={resetUpload} aria-label={pt(language, "d_remove")}>
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" />
                   </svg>
@@ -284,12 +286,12 @@ export function DocumentUpload({
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p06-extracted__icon">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h3" /><path d="M16 13h-2" /><path d="M8 17h8" />
                   </svg>
-                  <h2 className="mk-p06-extracted__heading">Extracted Information Preview</h2>
+                  <h2 className="mk-p06-extracted__heading">{pt(language, "d_preview")}</h2>
                 </div>
                 <div className="mk-p06-extracted__meta">
-                  <span className="mk-p06-badge mk-p06-badge--source">From uploaded document</span>
+                  <span className="mk-p06-badge mk-p06-badge--source">{pt(language, "d_from_doc")}</span>
                   <span className="mk-p06-extracted__meta-sep">•</span>
-                  <span className="mk-p06-extracted__meta-hint">Review and correct if needed</span>
+                  <span className="mk-p06-extracted__meta-hint">{pt(language, "d_review_hint")}</span>
                 </div>
               </div>
 
@@ -298,15 +300,15 @@ export function DocumentUpload({
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p06-review-alert__icon">
                     <circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" />
                   </svg>
-                  <span>We could not clearly read all details from this document. Please verify the information below before continuing.</span>
+                  <span>{pt(language, "d_unread")}</span>
                 </div>
               )}
 
               <div className="mk-p06-fields">
-                {FIELD_META.map(({ key, label }) => (
+                {FIELD_META.map(({ key, langKey }) => (
                   <div key={key} className="mk-p06-field">
                     <div className="mk-p06-field__left">
-                      <span className="mk-p06-field__label">{label} (From Document)</span>
+                      <span className="mk-p06-field__label">{pt(language, langKey)} {pt(language, "d_field_suffix")}</span>
                       {stage === "review" ? (
                         <input
                           className="mk-p06-field__input"
@@ -325,21 +327,21 @@ export function DocumentUpload({
                     </div>
                     <div className="mk-p06-field__right">
                       <span className={`mk-p06-badge mk-p06-badge--confidence ${activeDoc.confidence >= 0.5 ? "" : "mk-p06-badge--confidence--low"}`}>
-                        {confidenceLabel(activeDoc.confidence)} confidence
+                        {confidenceLabel(language, activeDoc.confidence)} {pt(language, "d_conf")}
                       </span>
                       {stage === "review" ? (
                         <button type="button" className="mk-p06-field__edit" onClick={handleSaveCorrection}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p06-field__edit-icon">
                             <path d="M20 6L9 17l-5-5" />
                           </svg>
-                          Save
+                          {pt(language, "d_save")}
                         </button>
                       ) : (
                         <button type="button" className="mk-p06-field__edit" onClick={() => setStage("review")}>
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p06-field__edit-icon">
                             <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                           </svg>
-                          Edit
+                          {pt(language, "d_edit")}
                         </button>
                       )}
                     </div>
@@ -352,8 +354,7 @@ export function DocumentUpload({
                   <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
                 <p>
-                  Information extracted from your document is organized for your doctor&apos;s
-                  review. It is not a diagnosis or clinical recommendation.
+                  {pt(language, "d_disclaimer")}
                 </p>
               </div>
             </div>
@@ -369,7 +370,7 @@ export function DocumentUpload({
           onClick={onSkip}
           disabled={stage === "processing"}
         >
-          Skip this step
+          {pt(language, "d_skip")}
         </button>
         {stage === "review" ? (
           <button
@@ -377,7 +378,7 @@ export function DocumentUpload({
             className="mk-p06-btn mk-p06-btn--continue"
             onClick={handleSaveCorrection}
           >
-            Save Correction
+            {pt(language, "d_save_corr")}
           </button>
         ) : (
           <button
@@ -386,7 +387,7 @@ export function DocumentUpload({
             onClick={handleContinueWithSave}
             disabled={stage === "processing" || stage === "idle" || stage === "selected" || stage === "error"}
           >
-            Continue to Summary
+            {pt(language, "d_continue")}
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p06-btn__icon">
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>

@@ -56,6 +56,7 @@ def init_db(db_path: Optional[str] = None) -> None:
                     asked_questions_json TEXT NOT NULL DEFAULT '[]',
                     asked_concepts_json TEXT NOT NULL DEFAULT '[]',
                     current_pending_question TEXT,
+                    question_source TEXT NOT NULL DEFAULT 'unknown',
                     adaptive_question_count INTEGER NOT NULL DEFAULT 0,
                     mentioned_documents_json TEXT NOT NULL DEFAULT '[]',
                     adaptive INTEGER NOT NULL DEFAULT 1,
@@ -99,6 +100,7 @@ def _migrate_sessions_table(conn: sqlite3.Connection) -> None:
         "asked_questions_json": "TEXT NOT NULL DEFAULT '[]'",
         "asked_concepts_json": "TEXT NOT NULL DEFAULT '[]'",
         "current_pending_question": "TEXT",
+        "question_source": "TEXT NOT NULL DEFAULT 'unknown'",
         "adaptive_question_count": "INTEGER NOT NULL DEFAULT 0",
         "mentioned_documents_json": "TEXT NOT NULL DEFAULT '[]'",
         "adaptive": "INTEGER NOT NULL DEFAULT 1",
@@ -118,8 +120,8 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                     interview_step, interview_complete, document_intake_done, chief_complaint, hpi_json, documents_json,
                     doctor_review_json, answer_records_json, raw_answers_json, safety_flagged,
                     safety_flag_time, safety_detail_json, department, queue_token,
-                    presentation_domain, collected_concepts_json, concept_metadata_json, denied_concepts_json, asked_questions_json, asked_concepts_json, current_pending_question, adaptive_question_count, mentioned_documents_json, adaptive, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    presentation_domain, collected_concepts_json, concept_metadata_json, denied_concepts_json, asked_questions_json, asked_concepts_json, current_pending_question, adaptive_question_count, mentioned_documents_json, adaptive, question_source, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 ON CONFLICT(session_id) DO UPDATE SET
                     patient_json = excluded.patient_json,
                     language = excluded.language,
@@ -150,6 +152,7 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                     adaptive_question_count = excluded.adaptive_question_count,
                     mentioned_documents_json = excluded.mentioned_documents_json,
                     adaptive = excluded.adaptive,
+                    question_source = excluded.question_source,
                     updated_at = CURRENT_TIMESTAMP;
             """, (
                 session.session_id,
@@ -182,6 +185,7 @@ def save_session(session: Session, db_path: Optional[str] = None) -> None:
                 int(session.adaptive_question_count),
                 json.dumps(session.mentioned_documents),
                 int(session.adaptive),
+                session.question_source,
             ))
     finally:
         conn.close()
@@ -215,6 +219,7 @@ def get_session(session_id: str, db_path: Optional[str] = None) -> Optional[Sess
         adaptive_question_count = int(row["adaptive_question_count"]) if "adaptive_question_count" in row_keys and row["adaptive_question_count"] is not None else 0
         mentioned_documents = json.loads(row["mentioned_documents_json"]) if "mentioned_documents_json" in row_keys and row["mentioned_documents_json"] else []
         adaptive = bool(row["adaptive"]) if "adaptive" in row_keys and row["adaptive"] is not None else False
+        question_source = row["question_source"] if "question_source" in row_keys and row["question_source"] else "unknown"
         
         return Session(
             session_id=row["session_id"],
@@ -247,6 +252,7 @@ def get_session(session_id: str, db_path: Optional[str] = None) -> Optional[Sess
             adaptive_question_count=adaptive_question_count,
             mentioned_documents=mentioned_documents,
             adaptive=adaptive,
+            question_source=question_source,
         )
 
     finally:

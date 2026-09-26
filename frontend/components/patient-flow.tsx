@@ -16,6 +16,7 @@ import {
 import type { Patient, Session as SessionType } from "../lib/types";
 import { DocumentUpload } from "./document-upload";
 import PatientConfirm from "./patient-confirm";
+import { pt } from "../lib/i18n";
 
 const SESSION_KEY = "medikiosk_session_id";
 
@@ -28,14 +29,14 @@ function MediKioskLogo() {
   );
 }
 
-export function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
+export function EmergencyHelpButton({ onHelp, language = "en" }: { onHelp: () => void; language?: string }) {
   return (
     <button
       type="button"
       onClick={onHelp}
       className="mk-emergency-btn"
       id="mk-always-visible-emergency-btn"
-      aria-label="Request immediate emergency medical assistance"
+      aria-label={pt(language, "emerg_aria")}
       style={{
         backgroundColor: "#DC2626",
         color: "#FFFFFF",
@@ -52,7 +53,7 @@ export function EmergencyHelpButton({ onHelp }: { onHelp: () => void }) {
         zIndex: 50,
       }}
     >
-      <span style={{ fontSize: "15px" }} aria-hidden="true">🚨</span> Need Help Now
+      <span style={{ fontSize: "15px" }} aria-hidden="true">🚨</span> {pt(language, "emerg_btn")}
     </button>
   );
 }
@@ -119,18 +120,21 @@ export function PatientFlow() {
   // legacy sessions show the current field name.
   const CURRENT_STEP_LABEL = isAdaptive
     ? (ANSWERED_COUNT > 0
-        ? `Interview in progress · ${ANSWERED_COUNT} question${ANSWERED_COUNT !== 1 ? "s" : ""} asked`
-        : "Interview in progress")
+        ? (ANSWERED_COUNT === 1
+            ? pt(language, "iv_asked_one")
+            : pt(language, "iv_asked_many", { n: ANSWERED_COUNT }))
+        : pt(language, "iv_in_progress"))
     : (() => {
         const FIELD_LABELS = [
-          { id: "chief_complaint", label: "Chief Complaint" },
-          { id: "onset", label: "Onset" },
-          { id: "duration", label: "Duration" },
-          { id: "severity", label: "Severity" },
-          { id: "character", label: "Character" },
-          { id: "associated_symptoms", label: "Associated Symptoms" },
-        ];
-        return FIELD_LABELS.find((f) => f.id === (session?.interview_step ?? ""))?.label ?? "Interview";
+          { id: "chief_complaint", key: "step_chief_complaint" },
+          { id: "onset", key: "step_onset" },
+          { id: "duration", key: "step_duration" },
+          { id: "severity", key: "step_severity" },
+          { id: "character", key: "step_character" },
+          { id: "associated_symptoms", key: "step_assoc" },
+        ] as const;
+        const found = FIELD_LABELS.find((f) => f.id === (session?.interview_step ?? ""));
+        return found ? pt(language, found.key) : pt(language, "nav_interview");
       })();
   // Dot count for progress bar: adaptive shows asked dots (max 5 slots), not a fixed total
   const PROGRESS_DOT_COUNT = isAdaptive ? Math.min(TOTAL_STEPS, 5) : TOTAL_STEPS;
@@ -295,7 +299,7 @@ export function PatientFlow() {
     setError(null);
     setLoading(true);
     try {
-      const qText = reactQuestion || "Answer";
+      const qText = reactQuestion || pt(language, "iv_q_fallback");
       const res = await submitAnswer(sessionId, answerInput.trim());
       setChat((prev) => [...prev, { q: qText, a: answerInput.trim() }]);
       setAnswerInput("");
@@ -393,29 +397,29 @@ export function PatientFlow() {
       const s = await getSession(sessionId);
       setSession(s);
       if (!s.document_intake_done) {
-        setError("Document step was not recorded. Please try again.");
+        setError(pt(language, "d_no_record"));
         return;
       }
       setScreen("summary");
     } catch (e) {
-      setError((e as Error).message || "Something went wrong. Please try again.");
+      setError((e as Error).message || pt(language, "d_failed"));
     }
   }
 
   if (screen === "consent" && sessionId) {
     const steps: { label: string; state: "done" | "active" | "upcoming" }[] = [
-      { label: "Language", state: "done" },
-      { label: "Consent", state: "active" },
-      { label: "Patient Code", state: "upcoming" },
-      { label: "Interview", state: "upcoming" },
-      { label: "Records", state: "upcoming" },
-      { label: "Summary", state: "upcoming" },
-      { label: "Token", state: "upcoming" },
+      { label: pt(language, "nav_language"), state: "done" },
+      { label: pt(language, "nav_consent"), state: "active" },
+      { label: pt(language, "nav_code"), state: "upcoming" },
+      { label: pt(language, "nav_interview"), state: "upcoming" },
+      { label: pt(language, "nav_records"), state: "upcoming" },
+      { label: pt(language, "nav_summary"), state: "upcoming" },
+      { label: pt(language, "nav_token"), state: "upcoming" },
     ];
     const points: { title: string; body: string; icon: ReactElement }[] = [
       {
-        title: "Assisting Your Consultation",
-        body: "MediKiosk records your health symptoms and Ayurvedic lifestyle history so your Vaidya (doctor) has a clear summary ready before your consultation.",
+        title: pt(language, "c_p1t"),
+        body: pt(language, "c_p1b"),
         icon: (
           <svg className="mk-p02-point__icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.5L18 8.5V19a2 2 0 01-2 2z" strokeLinecap="round" strokeLinejoin="round" />
@@ -423,8 +427,8 @@ export function PatientFlow() {
         ),
       },
       {
-        title: "Your information",
-        body: "Your responses and health records will be available to your treating doctor as part of your consultation.",
+        title: pt(language, "c_p2t"),
+        body: pt(language, "c_p2b"),
         icon: (
           <svg className="mk-p02-point__icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 002 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" strokeLinecap="round" strokeLinejoin="round" />
@@ -432,8 +436,8 @@ export function PatientFlow() {
         ),
       },
       {
-        title: "Doctor Makes All Decisions",
-        body: "MediKiosk helps organize your medical history. It does not diagnose, prescribe medication, or replace doctor advice.",
+        title: pt(language, "c_p3t"),
+        body: pt(language, "c_p3b"),
         icon: (
           <svg className="mk-p02-point__icon" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
             <path d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" strokeLinecap="round" strokeLinejoin="round" />
@@ -457,7 +461,7 @@ export function PatientFlow() {
                 <span className="mk-p02-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p02-nav" aria-label="Progress">
+            <nav className="mk-p02-nav" aria-label={pt(language, "a11y_progress")}>
               {steps.map((s) => (
                 <span
                   key={s.label}
@@ -467,15 +471,15 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
         <main className="mk-p02-main">
           <div className="mk-p02-title">
-            <span className="mk-p02-eyebrow">CONSENT & PRIVACY</span>
-            <h1 className="mk-p02-h1">Patient Consent</h1>
+            <span className="mk-p02-eyebrow">{pt(language, "c_eyebrow")}</span>
+            <h1 className="mk-p02-h1">{pt(language, "c_title")}</h1>
             <p className="mk-p02-sub">
-              Please review and agree to the consent details below before proceeding with your intake session.
+              {pt(language, "c_sub")}
             </p>
           </div>
           <div className="mk-p02-card">
@@ -495,7 +499,7 @@ export function PatientFlow() {
                 <div className="mk-p02-agree__lead">
                   <input className="mk-p02-agree__check" id="consent-agreement" type="checkbox" checked={consentChecked} onChange={(e) => setConsentChecked(e.target.checked)} />
                   <span className="mk-p02-agree__text">
-                    I understand and agree to share my symptom and health history for this pre-consultation intake.
+                    {pt(language, "c_agree")}
                   </span>
                 </div>
                 <div className="mk-p02-agree__badge">
@@ -507,10 +511,10 @@ export function PatientFlow() {
             </div>
             <div className="mk-p02-actions">
               <button className="mk-p02-btn mk-p02-btn--back" type="button" onClick={() => router.push("/")}>
-                ← Back
+                {pt(language, "back")}
               </button>
               <button className="mk-p02-btn mk-p02-btn--primary" type="button" onClick={handleConsent} disabled={loading || !consentChecked}>
-                {loading ? "Saving…" : "Agree & Continue"}
+                {loading ? pt(language, "c_saving") : pt(language, "c_btn")}
                 <svg className="mk-p02-btn__arrow" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M14 5l7 7m0 0l-7 7m7-7H3" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
@@ -519,7 +523,7 @@ export function PatientFlow() {
           </div>
         </main>
         <footer className="mk-p02-footer">
-          MediKiosk OPD Assistant • MediKiosk Patient Intake
+          {pt(language, "footer")}
         </footer>
       </div>
     );
@@ -527,13 +531,13 @@ export function PatientFlow() {
 
   if (screen === "code" && sessionId) {
     const steps: { label: string; state: "done" | "active" | "upcoming" }[] = [
-      { label: "Language", state: "done" },
-      { label: "Consent", state: "done" },
-      { label: "Patient", state: "active" },
-      { label: "Interview", state: "upcoming" },
-      { label: "Records", state: "upcoming" },
-      { label: "Summary", state: "upcoming" },
-      { label: "Token", state: "upcoming" },
+      { label: pt(language, "nav_language"), state: "done" },
+      { label: pt(language, "nav_consent"), state: "done" },
+      { label: pt(language, "nav_patient"), state: "active" },
+      { label: pt(language, "nav_interview"), state: "upcoming" },
+      { label: pt(language, "nav_records"), state: "upcoming" },
+      { label: pt(language, "nav_summary"), state: "upcoming" },
+      { label: pt(language, "nav_token"), state: "upcoming" },
     ];
     return (
       <div className="mk-p03">
@@ -551,14 +555,14 @@ export function PatientFlow() {
                 <span className="mk-p03-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p03-nav" aria-label="Progress">
+            <nav className="mk-p03-nav" aria-label={pt(language, "a11y_progress")}>
               {steps.map((s) => (
                 <span key={s.label} className={`mk-p03-nav__pill ${s.state === "active" ? "mk-p03-nav__pill--active" : ""} ${s.state === "done" ? "mk-p03-nav__pill--done" : ""}`}>
                   {s.label}
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
 
@@ -566,11 +570,11 @@ export function PatientFlow() {
           <div className="mk-p03-title">
             <span className="mk-p03-capsule">
               <span className="mk-p03-capsule__dot" />
-              PATIENT IDENTIFICATION
+              {pt(language, "code_eyebrow")}
             </span>
-            <h1 className="mk-p03-h1">Your Patient Code</h1>
+            <h1 className="mk-p03-h1">{pt(language, "code_title")}</h1>
             <p className="mk-p03-sub">
-              Your unique intake code has been generated. Please keep this code for your records and future visits.
+              {pt(language, "code_sub")}
             </p>
           </div>
 
@@ -581,10 +585,10 @@ export function PatientFlow() {
           <div className="mk-p03-case">
             <div className="mk-p03-code-panel">
               <span className="mk-p03-code-panel__hash" aria-hidden="true">#</span>
-              <span className="mk-p03-code-label">Generated Patient Code</span>
+              <span className="mk-p03-code-label">{pt(language, "code_generated")}</span>
               <div className="mk-p03-code-row">
                 <span className="mk-p03-code mk-token-number" aria-live="polite">
-                  {patientCode ?? "Generating…"}
+                  {patientCode ?? pt(language, "code_generating")}
                 </span>
                 <button
                   type="button"
@@ -599,8 +603,8 @@ export function PatientFlow() {
                     }
                   }}
                   disabled={!patientCode}
-                  title="Copy code"
-                  aria-label="Copy patient code"
+                  title={pt(language, "code_copy")}
+                  aria-label={pt(language, "code_copy")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mk-p03-copy__icon">
                     <rect x="9" y="9" width="11" height="11" rx="2" />
@@ -609,7 +613,7 @@ export function PatientFlow() {
                 </button>
               </div>
               <span className="mk-p03-toast" aria-live="polite">
-                Code copied to clipboard
+                {pt(language, "code_copied")}
               </span>
             </div>
 
@@ -619,9 +623,9 @@ export function PatientFlow() {
                   <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
                 </svg>
               </div>
-              <h2 className="mk-p03-save__title">Save for Future Visits</h2>
+              <h2 className="mk-p03-save__title">{pt(language, "code_save_t")}</h2>
               <p className="mk-p03-save__body">
-                Please note or save this code. You will need it to retrieve your MediKiosk intake record and for future visits.
+                {pt(language, "code_save_b")}
               </p>
             </div>
 
@@ -634,7 +638,7 @@ export function PatientFlow() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p03-btn__icon">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
-                Back
+                {pt(language, "back")}
               </button>
               <button
                 type="button"
@@ -642,7 +646,7 @@ export function PatientFlow() {
                 onClick={handleEnterInterview}
                 disabled={loading || !patientCode}
               >
-                {loading ? "Continuing…" : "Continue to Interview"}
+                {loading ? pt(language, "code_continuing") : pt(language, "code_continue")}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p03-btn__icon">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
@@ -651,7 +655,7 @@ export function PatientFlow() {
           </div>
         </main>
 
-        <footer className="mk-p03-footer">MediKiosk OPD Assistant • MediKiosk Patient Intake</footer>
+        <footer className="mk-p03-footer">{pt(language, "footer")}</footer>
       </div>
     );
   }
@@ -673,15 +677,15 @@ export function PatientFlow() {
                 <span className="mk-p04-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p04-nav" aria-label="Progress">
+            <nav className="mk-p04-nav" aria-label={pt(language, "a11y_progress")}>
               {[
-                { label: "Language", state: "done" as const },
-                { label: "Consent", state: "done" as const },
-                { label: "Patient", state: "done" as const },
-                { label: "Interview", state: "active" as const },
-                { label: "Records", state: "upcoming" as const },
-                { label: "Summary", state: "upcoming" as const },
-                { label: "Token", state: "upcoming" as const },
+                { label: pt(language, "nav_language"), state: "done" as const },
+                { label: pt(language, "nav_consent"), state: "done" as const },
+                { label: pt(language, "nav_patient"), state: "done" as const },
+                { label: pt(language, "nav_interview"), state: "active" as const },
+                { label: pt(language, "nav_records"), state: "upcoming" as const },
+                { label: pt(language, "nav_summary"), state: "upcoming" as const },
+                { label: pt(language, "nav_token"), state: "upcoming" as const },
               ].map((s) => (
                 <span
                   key={s.label}
@@ -691,25 +695,25 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
 
         <main className="mk-p04-main">
           <div className="mk-p04-title">
             <div className="mk-p04-title__row">
-              <span className="mk-p04-eyebrow">CLINICAL INTAKE INTERVIEW</span>
+              <span className="mk-p04-eyebrow">{pt(language, "iv_eyebrow")}</span>
               <span className="mk-p04-step-chip">
                 <span>{CURRENT_STEP_LABEL}</span>
               </span>
             </div>
             <h1 className="mk-p04-h1">
-              {reactQuestion || "Please answer the question below."}
+              {reactQuestion || pt(language, "iv_q_fallback")}
             </h1>
             <p className="mk-p04-sub">
-              Please describe what you are experiencing in your own words. We will take this one step at a time.
+              {pt(language, "iv_sub")}
             </p>
-            <div className="mk-p04-progress" aria-label={isAdaptive ? `${ANSWERED_COUNT} questions asked` : `Question ${Math.min(ANSWERED_COUNT + 1, TOTAL_STEPS)} of ${TOTAL_STEPS}`}>
+            <div className="mk-p04-progress" aria-label={isAdaptive ? pt(language, "iv_asked_aria", { n: ANSWERED_COUNT }) : pt(language, "iv_progress_aria", { n: Math.min(ANSWERED_COUNT + 1, TOTAL_STEPS), total: TOTAL_STEPS })}>
               {Array.from({ length: PROGRESS_DOT_COUNT }).map((_, i) => (
                 <span
                   key={i}
@@ -731,26 +735,26 @@ export function PatientFlow() {
                 </svg>
               </div>
               <div className="mk-p04-assistant__text">
-                <span className="mk-p04-assistant__label">MediKiosk Assistant</span>
+                <span className="mk-p04-assistant__label">{pt(language, "iv_assist")}</span>
                 <p className="mk-p04-assistant__body">
-                  Welcome! I&rsquo;ll ask a few guided questions to record your symptoms and health history before your consultation.
+                  {pt(language, "iv_assist_b")}
                 </p>
               </div>
             </div>
 
             <div className="mk-p04-field">
               <label className="mk-p04-field__label" htmlFor="mk-p04-input">
-                <span>Primary symptom or concern</span>
-                <span className="mk-p04-field__count">{answerInput.length} characters</span>
+                <span>{pt(language, "iv_field")}</span>
+                <span className="mk-p04-field__count">{pt(language, "iv_chars", { n: answerInput.length })}</span>
               </label>
               <textarea
                 id="mk-p04-input"
                 className="mk-p04-textarea"
-                placeholder="Type your response here, or tap the microphone to speak..."
+                placeholder={pt(language, "iv_ph")}
                 value={answerInput}
                 onChange={(e) => setAnswerInput(e.target.value)}
                 disabled={loading}
-                aria-label="Interview answer"
+                aria-label={pt(language, "iv_answer_aria")}
                 maxLength={2000}
                 rows={4}
               />
@@ -762,23 +766,23 @@ export function PatientFlow() {
                   type="button"
                   className="mk-p04-voice"
                   disabled
-                  title="Voice input coming soon"
-                  aria-label="Voice input (currently unavailable)"
+                  title={pt(language, "iv_voice_title")}
+                  aria-label={pt(language, "iv_voice_na")}
                 >
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="mk-p04-voice__icon" aria-hidden="true">
                     <rect x="9" y="3" width="6" height="11" rx="3" />
                     <path d="M5 11a7 7 0 0 0 14 0M12 18v3M8 21h8" />
                   </svg>
-                  <span>Voice unavailable</span>
+                  <span>{pt(language, "iv_voice_na")}</span>
                 </button>
                 <button
                   type="button"
                   className="mk-p04-clear"
                   onClick={() => setAnswerInput("")}
                   disabled={loading || answerInput.length === 0}
-                  aria-label="Clear response"
+                  aria-label={pt(language, "iv_clear_aria")}
                 >
-                  Clear
+                  {pt(language, "iv_clear")}
                 </button>
               </div>
             </div>
@@ -793,7 +797,7 @@ export function PatientFlow() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p04-btn__icon" aria-hidden="true">
                   <path d="M19 12H5M12 19l-7-7 7-7" />
                 </svg>
-                Previous Step
+                {pt(language, "iv_prev")}
               </button>
               <button
                 type="button"
@@ -801,7 +805,7 @@ export function PatientFlow() {
                 onClick={handleAnswer}
                 disabled={loading || !answerInput.trim()}
               >
-                {loading ? "Submitting…" : "Next Question"}
+                {loading ? pt(language, "iv_submitting") : pt(language, "iv_next")}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p04-btn__icon" aria-hidden="true">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
@@ -818,12 +822,12 @@ export function PatientFlow() {
               </svg>
             </span>
             <p>
-              MediKiosk organizes your medical history for your doctor. It does not provide diagnoses or prescribe treatments.
+              {pt(language, "iv_disclaimer")}
             </p>
           </div>
         </main>
 
-        <footer className="mk-p04-footer">MediKiosk OPD Assistant • MediKiosk Patient Intake</footer>
+        <footer className="mk-p04-footer">{pt(language, "footer")}</footer>
       </div>
     );
   }
@@ -845,15 +849,15 @@ export function PatientFlow() {
                 <span className="mk-p06-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p06-nav" aria-label="Progress">
+            <nav className="mk-p06-nav" aria-label={pt(language, "a11y_progress")}>
               {[
-                { label: "Language", state: "done" as const },
-                { label: "Consent", state: "done" as const },
-                { label: "Code", state: "done" as const },
-                { label: "Interview", state: "done" as const },
-                { label: "Records", state: "active" as const },
-                { label: "Summary", state: "upcoming" as const },
-                { label: "Token", state: "upcoming" as const },
+                { label: pt(language, "nav_language"), state: "done" as const },
+                { label: pt(language, "nav_consent"), state: "done" as const },
+                { label: pt(language, "nav_code"), state: "done" as const },
+                { label: pt(language, "nav_interview"), state: "done" as const },
+                { label: pt(language, "nav_records"), state: "active" as const },
+                { label: pt(language, "nav_summary"), state: "upcoming" as const },
+                { label: pt(language, "nav_token"), state: "upcoming" as const },
               ].map((s) => (
                 <span
                   key={s.label}
@@ -863,7 +867,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
 
@@ -892,6 +896,7 @@ export function PatientFlow() {
           )}
           <DocumentUpload
             sessionId={sessionId}
+            language={language}
             onContinue={handleDocumentsDone}
             onSkip={handleDocumentsDone}
           />
@@ -899,12 +904,10 @@ export function PatientFlow() {
 
         <footer className="mk-p06-footer">
           <p className="mk-p06-footer__notice">
-            MediKiosk organizes your medical records for your doctor. It does not provide diagnoses or prescribe treatments.
+            {pt(language, "d_footer_note")}
           </p>
           <div className="mk-p06-footer__protocol">
-            <span>MediKiosk OPD Assistant</span>
-            <span className="mk-p06-footer__sep">•</span>
-            <span>MediKiosk Patient Intake</span>
+            {pt(language, "footer")}
           </div>
         </footer>
       </div>
@@ -929,15 +932,15 @@ export function PatientFlow() {
                 <span className="mk-p08-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p08-nav" aria-label="Progress">
+            <nav className="mk-p08-nav" aria-label={pt(language, "a11y_progress")}>
               {[
-                { label: "Language", state: "done" as const },
-                { label: "Consent", state: "done" as const },
-                { label: "Code", state: "done" as const },
-                { label: "Interview", state: "done" as const },
-                { label: "Records", state: "done" as const },
-                { label: "Summary", state: "done" as const },
-                { label: "Token", state: "active" as const },
+                { label: pt(language, "nav_language"), state: "done" as const },
+                { label: pt(language, "nav_consent"), state: "done" as const },
+                { label: pt(language, "nav_code"), state: "done" as const },
+                { label: pt(language, "nav_interview"), state: "done" as const },
+                { label: pt(language, "nav_records"), state: "done" as const },
+                { label: pt(language, "nav_summary"), state: "done" as const },
+                { label: pt(language, "nav_token"), state: "active" as const },
               ].map((s) => (
                 <span
                   key={s.label}
@@ -952,15 +955,15 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
 
         <main className="mk-p08-main">
           <div className="mk-p08-content">
-            <span className="mk-p08-eyebrow">CONFIRMATION &amp; QUEUE TOKEN</span>
-            <h1 className="mk-p08-h1">Your information is confirmed</h1>
-            <p className="mk-p08-sub">Your intake details have been recorded for your consultation. Please take note of your token number below.</p>
+            <span className="mk-p08-eyebrow">{pt(language, "t_eyebrow")}</span>
+            <h1 className="mk-p08-h1">{pt(language, "t_title")}</h1>
+            <p className="mk-p08-sub">{pt(language, "t_sub")}</p>
 
             <div className="mk-p08-card">
               <div className="mk-p08-status">
@@ -968,20 +971,20 @@ export function PatientFlow() {
                   <svg className="mk-p08-status__icon" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M20 6L9 17l-5-5" />
                   </svg>
-                  Intake Complete
+                  {pt(language, "t_done")}
                 </div>
               </div>
 
               <div className="mk-p08-dept">
-                <span className="mk-p08-dept__label">ASSIGNED OPD DEPARTMENT</span>
+                <span className="mk-p08-dept__label">{pt(language, "t_dept")}</span>
                 <span className="mk-p08-dept__name">{tokenData.department}</span>
-                <span className="mk-p08-dept__sub">General Ayurvedic Medicine</span>
+                <span className="mk-p08-dept__sub">{pt(language, "t_dept_sub")}</span>
               </div>
 
               <div className="mk-p08-token-box">
-                <div className="mk-p08-token-box__label">DEPARTMENT QUEUE TOKEN</div>
+                <div className="mk-p08-token-box__label">{pt(language, "t_token_label")}</div>
                 <div className="mk-p08-token-box__number">{tokenData.token}</div>
-                <div className="mk-p08-token-box__sub">Position in department queue</div>
+                <div className="mk-p08-token-box__sub">{pt(language, "t_token_sub")}</div>
               </div>
 
               <div className="mk-p08-patient-code">
@@ -991,18 +994,18 @@ export function PatientFlow() {
                     <circle cx="8.5" cy="7" r="4" />
                     <path d="M20 8v6M23 11h-6" />
                   </svg>
-                  Patient Code: {patientCode || session.patient_code || "—"}
+                  {pt(language, "t_code_label")} {patientCode || session.patient_code || "—"}
                 </div>
-                <p className="mk-p08-patient-code__desc">Share this code with clinic staff when called. It links your intake data to your consultation record.</p>
+                <p className="mk-p08-patient-code__desc">{pt(language, "t_code_desc")}</p>
               </div>
 
               <div className="mk-p08-guidance">
-                <p className="mk-p08-guidance__title">Please wait for your token to be called.</p>
-                <p className="mk-p08-guidance__desc">Stay in the waiting area near the OPD reception. Your token will appear on the waiting screen and be called aloud by the receptionist.</p>
+                <p className="mk-p08-guidance__title">{pt(language, "t_wait_t")}</p>
+                <p className="mk-p08-guidance__desc">{pt(language, "t_wait_d")}</p>
               </div>
 
               <button type="button" className="mk-p08-btn" onClick={handleGotoWaiting}>
-                Done / View Waiting Screen
+                {pt(language, "t_goto")}
                 <svg className="mk-p08-btn__arrow" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M5 12h14M12 5l7 7-7 7" />
                 </svg>
@@ -1012,7 +1015,7 @@ export function PatientFlow() {
         </main>
 
         <footer className="mk-p08-footer">
-          <p className="mk-p08-footer__protocol">MediKiosk OPD Assistant &bull; MediKiosk Patient Intake</p>
+          <p className="mk-p08-footer__protocol">{pt(language, "footer")}</p>
         </footer>
       </div>
     );
@@ -1036,15 +1039,15 @@ export function PatientFlow() {
                 <span className="mk-p09-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p09-nav" aria-label="Progress">
+            <nav className="mk-p09-nav" aria-label={pt(language, "a11y_progress")}>
               {[
-                { label: "Language", state: "done" as const },
-                { label: "Consent", state: "done" as const },
-                { label: "Code", state: "done" as const },
-                { label: "Interview", state: "done" as const },
-                { label: "Records", state: "done" as const },
-                { label: "Summary", state: "done" as const },
-                { label: "Token Complete", state: "active" as const },
+                { label: pt(language, "nav_language"), state: "done" as const },
+                { label: pt(language, "nav_consent"), state: "done" as const },
+                { label: pt(language, "nav_code"), state: "done" as const },
+                { label: pt(language, "nav_interview"), state: "done" as const },
+                { label: pt(language, "nav_records"), state: "done" as const },
+                { label: pt(language, "nav_summary"), state: "done" as const },
+                { label: pt(language, "nav_token_done"), state: "active" as const },
               ].map((s) => (
                 <span
                   key={s.label}
@@ -1064,15 +1067,15 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
 
         <main className="mk-p09-main">
           <div className="mk-p09-content">
-            <span className="mk-p09-eyebrow">OPD QUEUE WAITING</span>
-            <h1 className="mk-p09-h1">Please wait for your token to be called</h1>
-            <p className="mk-p09-sub">Your intake is complete. Please remain in the waiting area until your department queue token is announced or displayed.</p>
+            <span className="mk-p09-eyebrow">{pt(language, "w9_eyebrow")}</span>
+            <h1 className="mk-p09-h1">{pt(language, "w9_title")}</h1>
+            <p className="mk-p09-sub">{pt(language, "w9_sub")}</p>
 
             <div className="mk-p09-card">
               <div className="mk-p09-status">
@@ -1080,20 +1083,20 @@ export function PatientFlow() {
                   <svg className="mk-p09-status__icon" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M20 6L9 17l-5-5" />
                   </svg>
-                  Intake Complete
+                  {pt(language, "t_done")}
                 </div>
               </div>
 
               <div className="mk-p09-dept">
-                <span className="mk-p09-dept__label">DEPARTMENT</span>
+                <span className="mk-p09-dept__label">{pt(language, "w9_dept")}</span>
                 <span className="mk-p09-dept__name">{tokenData.department}</span>
-                <span className="mk-p09-dept__sub">General Ayurvedic Medicine</span>
+                <span className="mk-p09-dept__sub">{pt(language, "t_dept_sub")}</span>
               </div>
 
               <div className="mk-p09-token-box">
-                <div className="mk-p09-token-box__label">YOUR QUEUE TOKEN</div>
+                <div className="mk-p09-token-box__label">{pt(language, "w9_token_label")}</div>
                 <div className="mk-p09-token-box__number">{tokenData.token}</div>
-                <div className="mk-p09-token-box__sub">Position in department queue</div>
+                <div className="mk-p09-token-box__sub">{pt(language, "t_token_sub")}</div>
               </div>
 
               <div className="mk-p09-patient-code">
@@ -1102,28 +1105,28 @@ export function PatientFlow() {
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
                     <polyline points="14 2 14 8 20 8" />
                   </svg>
-                  Patient Code: <strong>{patientCode || session.patient_code || "-"}</strong>
+                  {pt(language, "t_code_label")} <strong>{patientCode || session.patient_code || "-"}</strong>
                 </div>
-                <p className="mk-p09-patient-code__desc">Identifies your MediKiosk record throughout your visit</p>
+                <p className="mk-p09-patient-code__desc">{pt(language, "w9_code_desc")}</p>
               </div>
 
               <div className="mk-p09-guidance">
-                <p className="mk-p09-guidance__title">Keep your patient code and queue token handy.</p>
-                <p className="mk-p09-guidance__desc">When your token number is called, follow the instructions provided by the department.</p>
+                <p className="mk-p09-guidance__title">{pt(language, "w9_keep_t")}</p>
+                <p className="mk-p09-guidance__desc">{pt(language, "w9_keep_d")}</p>
               </div>
 
               <button type="button" className="mk-p09-btn" onClick={handleSafetyReset}>
                 <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                   <path d="M20 6L9 17l-5-5" />
                 </svg>
-                Done / Return to Welcome
+                {pt(language, "w9_done")}
               </button>
             </div>
           </div>
         </main>
 
         <footer className="mk-p09-footer">
-          <p className="mk-p09-footer__protocol">MediKiosk OPD Assistant &bull; MediKiosk Patient Intake</p>
+          <p className="mk-p09-footer__protocol">{pt(language, "footer")}</p>
         </footer>
       </div>
     );
@@ -1146,15 +1149,15 @@ export function PatientFlow() {
                 <span className="mk-p07-brand__tag">OPD</span>
               </div>
             </div>
-            <nav className="mk-p07-nav" aria-label="Progress">
+            <nav className="mk-p07-nav" aria-label={pt(language, "a11y_progress")}>
               {[
-                { label: "Language", state: "done" as const },
-                { label: "Consent", state: "done" as const },
-                { label: "Code", state: "done" as const },
-                { label: "Interview", state: "done" as const },
-                { label: "Records", state: "done" as const },
-                { label: "Summary", state: "active" as const },
-                { label: "Token", state: "upcoming" as const },
+                { label: pt(language, "nav_language"), state: "done" as const },
+                { label: pt(language, "nav_consent"), state: "done" as const },
+                { label: pt(language, "nav_code"), state: "done" as const },
+                { label: pt(language, "nav_interview"), state: "done" as const },
+                { label: pt(language, "nav_records"), state: "done" as const },
+                { label: pt(language, "nav_summary"), state: "active" as const },
+                { label: pt(language, "nav_token"), state: "upcoming" as const },
               ].map((s) => (
                 <span
                   key={s.label}
@@ -1164,7 +1167,7 @@ export function PatientFlow() {
                 </span>
               ))}
             </nav>
-            <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+            <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
           </div>
         </header>
 
@@ -1173,6 +1176,7 @@ export function PatientFlow() {
             session={session}
             sessionId={sessionId ?? ""}
             patientCode={patientCode || session.patient_code || undefined}
+            language={language}
             onReset={handleSafetyReset}
             onBackToRecords={() => setScreen("documents")}
             onTokenGenerated={(token, dept) => setTokenData({ token, department: dept })}
@@ -1181,7 +1185,7 @@ export function PatientFlow() {
 
         <footer className="mk-p07-footer">
           <p className="mk-p07-footer__protocol">
-            MediKiosk OPD Assistant • MediKiosk Patient Intake
+            {pt(language, "footer")}
           </p>
         </footer>
       </div>
@@ -1195,7 +1199,7 @@ export function PatientFlow() {
           <MediKioskLogo />
           <span className="mk-patient-header__wordmark">MediKiosk</span>
         </div>
-        <EmergencyHelpButton onHelp={handleEmergencyAlert} />
+        <EmergencyHelpButton onHelp={handleEmergencyAlert} language={language} />
       </div>
       <div className="mk-patient-card">
         {error && (
@@ -1205,12 +1209,12 @@ export function PatientFlow() {
         {screen === "welcome" && (
           <div>
             <h1 className="mk-question">
-              Welcome to <span style={{ color: "var(--mk-primary)" }}>MediKiosk</span>
+              {pt(language, "w_title_a")} <span style={{ color: "var(--mk-primary)" }}>MediKiosk</span>
             </h1>
-            <p className="mk-helper">Quick. Simple. Secure.</p>
+            <p className="mk-helper">{pt(language, "w_sub")}</p>
 
             <div className="mk-form-group">
-              <label className="mk-field-label">Language</label>
+              <label className="mk-field-label">{pt(language, "w_language")}</label>
               <div className="mk-chip-group">
                 {[
                   { code: "en", label: "English" },
@@ -1230,46 +1234,46 @@ export function PatientFlow() {
             </div>
 
             <div className="mk-form-group">
-              <label className="mk-field-label">Visit status</label>
+              <label className="mk-field-label">{pt(language, "w_visit")}</label>
               <div className="mk-chip-group">
                 <div className="mk-chip selected">
-                  {visitType === "returning" ? "Returning Patient" : "New Patient"}
+                  {visitType === "returning" ? pt(language, "w_ret") : pt(language, "w_new")}
                 </div>
               </div>
             </div>
 
             <div className="mk-form-group">
-              <label className="mk-field-label">Full name</label>
+              <label className="mk-field-label">{pt(language, "w_name")}</label>
               <input
                 className="mk-input"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Enter your name"
+                placeholder={pt(language, "w_name_ph")}
               />
             </div>
 
             <div className="mk-form-group">
-              <label className="mk-field-label">Age</label>
+              <label className="mk-field-label">{pt(language, "w_age")}</label>
               <input
                 className="mk-input"
                 value={age}
                 onChange={(e) => setAge(e.target.value.replace(/\D/g, ""))}
-                placeholder="Enter your age"
+                placeholder={pt(language, "w_age_ph")}
                 inputMode="numeric"
               />
             </div>
 
             <div className="mk-form-group">
-              <label className="mk-field-label">Gender</label>
+              <label className="mk-field-label">{pt(language, "w_gender")}</label>
               <div className="mk-chip-group">
-                {["male", "female", "other"].map((g) => (
+                {(["male", "female", "other"] as const).map((g) => (
                   <button
                     key={g}
                     type="button"
                     className={`mk-chip ${gender === g ? "selected" : ""}`}
                     onClick={() => setGender(g)}
                   >
-                    {g.charAt(0).toUpperCase() + g.slice(1)}
+                    {g === "male" ? pt(language, "w_male") : g === "female" ? pt(language, "w_female") : pt(language, "w_other")}
                   </button>
                 ))}
               </div>
@@ -1281,23 +1285,23 @@ export function PatientFlow() {
               className="mk-button mk-button--primary"
               style={{ width: "100%" }}
             >
-              {loading ? "Starting…" : visitType === "returning" ? "Continue →" : "Start Now →"}
+              {loading ? pt(language, "w_starting") : visitType === "returning" ? pt(language, "w_continue") : pt(language, "w_start")}
             </button>
           </div>
         )}
 
         {screen === "lookup" && (
           <div>
-            <h1 className="mk-question">Enter Your Patient Code</h1>
-            <p className="mk-helper">Your patient code is the ID from your previous visit (e.g. AIIA-202609-00001).</p>
+            <h1 className="mk-question">{pt(language, "lk_title")}</h1>
+            <p className="mk-helper">{pt(language, "lk_sub")}</p>
 
             <div className="mk-form-group">
-              <label className="mk-field-label">Patient Code</label>
+              <label className="mk-field-label">{pt(language, "lk_label")}</label>
               <input
                 className="mk-input"
                 value={priorPatientCode}
                 onChange={(e) => { setPriorPatientCode(e.target.value.toUpperCase()); setLookupResult(null); }}
-                placeholder="AIIA-YYYYMM-NNNNN"
+                placeholder={pt(language, "lk_ph")}
                 autoComplete="off"
                 onKeyDown={(e) => e.key === "Enter" && handleLookup()}
               />
@@ -1307,16 +1311,16 @@ export function PatientFlow() {
               <div className={`mk-info-banner ${lookupResult.found ? "mk-info-banner--success" : "mk-info-banner--warn"}`} role="status">
                 {lookupResult.found ? (
                   <>
-                    <strong>Previous visit found</strong>
+                    <strong>{pt(language, "lk_found")}</strong>
                     {lookupResult.chief_complaint && (
-                      <p style={{ margin: "4px 0 0" }}>Last complaint: {lookupResult.chief_complaint}</p>
+                      <p style={{ margin: "4px 0 0" }}>{pt(language, "lk_last", { complaint: lookupResult.chief_complaint })}</p>
                     )}
                     {lookupResult.visit_date && (
                       <p style={{ margin: "2px 0 0", fontSize: "0.85em", opacity: 0.75 }}>{lookupResult.visit_date.slice(0, 10)}</p>
                     )}
                   </>
                 ) : (
-                  <span>No completed visit found for this code — we will start a fresh intake.</span>
+                  <span>{pt(language, "lk_notfound")}</span>
                 )}
               </div>
             )}
@@ -1327,7 +1331,7 @@ export function PatientFlow() {
                 className="mk-button"
                 style={{ flex: "0 0 auto" }}
               >
-                ← Back
+                {pt(language, "back")}
               </button>
               {lookupResult === null ? (
                 <button
@@ -1336,7 +1340,7 @@ export function PatientFlow() {
                   className="mk-button mk-button--primary"
                   style={{ flex: 1 }}
                 >
-                  {loading ? "Looking up…" : "Look Up →"}
+                  {loading ? pt(language, "lk_looking") : pt(language, "lk_lookup")}
                 </button>
               ) : (
                 <button
@@ -1345,7 +1349,7 @@ export function PatientFlow() {
                   className="mk-button mk-button--primary"
                   style={{ flex: 1 }}
                 >
-                  {loading ? "Starting…" : "Start Visit →"}
+                  {loading ? pt(language, "w_starting") : pt(language, "lk_start")}
                 </button>
               )}
             </div>
@@ -1380,7 +1384,7 @@ export function PatientFlow() {
                       <path d="M9 12l2 2 4-4" />
                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                     </svg>
-                    <span>CLINICAL SAFETY NOTICE</span>
+                    <span>{pt(language, "s_eyebrow")}</span>
                   </div>
                   <span className="mk-p05-status">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p05-status__icon" aria-hidden="true">
@@ -1389,12 +1393,12 @@ export function PatientFlow() {
                       <line x1="10" y1="17" x2="14" y2="17" />
                       <line x1="10" y1="15" x2="14" y2="15" />
                     </svg>
-                    <span>Intake Paused</span>
+                    <span>{pt(language, "s_paused")}</span>
                   </span>
                 </div>
-                <h1 className="mk-p05-h1">Please speak with a staff member before continuing.</h1>
+                <h1 className="mk-p05-h1">{pt(language, "s_title")}</h1>
                 <p className="mk-p05-sub">
-                  We need to pause this intake session. Please speak with a staff member for further assistance.
+                  {pt(language, "s_sub")}
                 </p>
               </div>
 
@@ -1408,9 +1412,9 @@ export function PatientFlow() {
                     </svg>
                   </div>
                   <div className="mk-p05-info__text">
-                    <h2 className="mk-p05-info__title">Intake Process Paused</h2>
+                    <h2 className="mk-p05-info__title">{pt(language, "s_info1t")}</h2>
                     <p className="mk-p05-info__body">
-                      Based on the responses entered during your MediKiosk intake, the session has been paused. No department queue token has been generated from this kiosk.
+                      {pt(language, "s_info1b")}
                     </p>
                   </div>
                 </div>
@@ -1422,21 +1426,21 @@ export function PatientFlow() {
                     </svg>
                   </div>
                   <div className="mk-p05-info__text">
-                    <h2 className="mk-p05-info__title">Next Steps for Assistance</h2>
+                    <h2 className="mk-p05-info__title">{pt(language, "s_info2t")}</h2>
                     <p className="mk-p05-info__body">
-                      Please speak directly with a clinic staff member in the area. Let them know that your intake requires staff review.
+                      {pt(language, "s_info2b")}
                     </p>
                   </div>
                 </div>
 
                 <div className="mk-p05-ref">
-                  <span className="mk-p05-ref__label">Reference Identifier</span>
+                  <span className="mk-p05-ref__label">{pt(language, "s_ref")}</span>
                   <span className="mk-p05-ref__value">
-                    Patient Code:&nbsp;
-                    <strong>{patientCode || session?.patient_code || "Assigned at check-in"}</strong>
+                    {pt(language, "s_patient_code")}&nbsp;
+                    <strong>{patientCode || session?.patient_code || pt(language, "s_assigned")}</strong>
                   </span>
                   <span className="mk-p05-ref__hint">
-                    Keep this reference code handy when speaking with clinic staff.
+                    {pt(language, "s_keep")}
                   </span>
                 </div>
               </div>
@@ -1450,18 +1454,18 @@ export function PatientFlow() {
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="mk-p05-btn__icon" aria-hidden="true">
                     <path d="M19 12H5M12 19l-7-7 7-7" />
                   </svg>
-                  Return to Welcome Screen
+                  {pt(language, "s_back")}
                 </button>
               </div>
 
               <div className="mk-p05-protocol">
                 <span>MediKiosk OPD Assistant</span>
                 <span className="mk-p05-protocol__sep">•</span>
-                <span>Patient Intake Protocol P05</span>
+                <span>{pt(language, "s_protocol")}</span>
               </div>
             </main>
 
-            <footer className="mk-p05-footer">MediKiosk OPD Assistant • MediKiosk Patient Intake</footer>
+            <footer className="mk-p05-footer">{pt(language, "footer")}</footer>
           </div>
         )}
       </div>

@@ -77,6 +77,9 @@ class Session(BaseModel):
     asked_questions: List[str] = Field(default_factory=list)
     asked_concepts: List[str] = Field(default_factory=list)
     current_pending_question: Optional[str] = Field(default=None)
+    # Telemetry: how the pending question was produced ("llm_generated",
+    # "corrected_llm", "fallback_generated", "unknown"/legacy).
+    question_source: str = Field(default="unknown", max_length=30)
     adaptive_question_count: int = Field(default=0)
     mentioned_documents: List[str] = Field(default_factory=list)
     adaptive: bool = Field(default=False)

@@ -87,6 +87,62 @@ def test_p19_extracts_explicit_duration_with_digits():
 
 
 # ---------------------------------------------------------------------------
+# Multi-fact trigger extraction (reversed "<trigger> makes it worse" order)
+# ---------------------------------------------------------------------------
+
+def test_p19_extracts_duration_only():
+    concepts = extract_concepts_from_text("I have had burning for two weeks.")
+    assert concepts.get("duration") == "two weeks"
+    assert "food_relationship" not in concepts
+    assert "aggravating_factors" not in concepts
+
+
+def test_p19_extracts_trigger_only():
+    concepts = extract_concepts_from_text("Spicy food makes it worse.")
+    assert concepts.get("food_relationship") == "spicy food"
+
+
+def test_p19_extracts_duration_and_trigger_in_one_sentence():
+    concepts = extract_concepts_from_text(
+        "I have burning for two weeks and spicy food makes it worse."
+    )
+    assert concepts.get("duration") == "two weeks"
+    assert concepts.get("food_relationship") == "spicy food"
+
+
+def test_p19_extracts_multi_fact_in_arbitrary_order():
+    concepts = extract_concepts_from_text(
+        "Spicy food makes it worse, and I have had burning for two weeks."
+    )
+    assert concepts.get("duration") == "two weeks"
+    assert concepts.get("food_relationship") == "spicy food"
+
+
+def test_p19_extracts_trigger_paraphrases():
+    assert extract_concepts_from_text(
+        "Eating spicy food worsens my burning."
+    ).get("food_relationship") == "eating spicy food"
+    assert extract_concepts_from_text(
+        "Walking a lot aggravates it."
+    ).get("aggravating_factors") == "walking a lot"
+
+
+def test_p19_denied_trigger_is_not_persisted_as_positive():
+    concepts = extract_concepts_from_text("Spicy food does not make it worse.")
+    assert "food_relationship" not in concepts
+    assert "aggravating_factors" not in concepts
+
+
+def test_p19_full_multi_fact_sentence():
+    concepts = extract_concepts_from_text(
+        "I have burning for two weeks, it is mild, and spicy food makes it worse."
+    )
+    assert concepts.get("duration") == "two weeks"
+    assert concepts.get("severity") == "mild"
+    assert concepts.get("food_relationship") == "spicy food"
+
+
+# ---------------------------------------------------------------------------
 # Gujarati question-quality guard
 # ---------------------------------------------------------------------------
 

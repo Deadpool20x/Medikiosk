@@ -163,6 +163,7 @@ class StartSessionRequest(BaseModel):
 class StartSessionResponse(BaseModel):
     session_id: str
     prior_context_loaded: bool = False
+    question_source: str = "unknown"
 
 class ConsentRequest(BaseModel):
     consent_given: bool = True
@@ -195,6 +196,7 @@ class AnswerResponse(BaseModel):
     mentioned_documents: List[str] = Field(default_factory=list)
     denied_concepts: List[str] = Field(default_factory=list)
     completion_message: Optional[str] = None
+    question_source: str = "unknown"
 
 class EmergencyAlertResponse(BaseModel):
     status: str = "emergency_alerted"
@@ -257,12 +259,78 @@ class SessionResponse(BaseModel):
     denied_concepts: List[str] = Field(default_factory=list)
     interview_status: str = "in_progress"
     adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
+    question_source: str = "unknown"
 
 class PatientLookupResponse(BaseModel):
     found: bool
     visit_date: str = ""
     chief_complaint: str = ""
     presentation_domain: str = ""
+
+
+async def _resolve_opening_question(session: Session) -> Dict[str, Any]:
+    """Normal Q1 pipeline — the same interviewer architecture as later turns.
+
+    START -> build opening context -> request LLM proposal -> validate ->
+    valid ? persist proposal : bounded correction -> valid ? persist :
+    deterministic fallback (failure-only). Returns dict with text,
+    target_concept, source (llm_generated | corrected_llm | fallback_generated)
+    and provider.
+    """
+    from types import SimpleNamespace
+
+    context = build_conversation_context(session, "")
+    context["opening_turn"] = True
+
+    try:
+        llm_result = await generate_adaptive_turn(context)
+    except Exception as e:
+        logger.warning("Q1 generate_adaptive_turn failed, using fallback: %s", e)
+        fallback = get_fallback_question(session, "primary_symptom")
+        return {"text": fallback["text"], "target_concept": fallback["target_concept"],
+                "source": "fallback_generated", "provider": None}
+
+    next_q = (llm_result.get("next_question") or {}) if isinstance(llm_result, dict) else {}
+    status = llm_result.get("status", "continue") if isinstance(llm_result, dict) else "continue"
+    dummy = SimpleNamespace(
+        case_update=SimpleNamespace(concepts={}),
+        next_question=SimpleNamespace(**next_q) if next_q else None,
+        status=status,
+    )
+    validation = validate_llm_proposal(dummy, session, session.presentation_domain)
+    if validation.valid and dummy.next_question:
+        return {"text": dummy.next_question.text,
+                "target_concept": dummy.next_question.target_concept,
+                "source": "llm_generated",
+                "provider": llm_result.get("provider")}
+
+    try:
+        corrected = await correct_adaptive_turn(
+            session_context=context,
+            validation_reasons=validation.reasons,
+            recovery_hint=validation.recovery_hint,
+        )
+    except Exception as e:
+        logger.warning("Q1 correct_adaptive_turn failed, using fallback: %s", e)
+        corrected = None
+    if corrected and isinstance(corrected, dict):
+        corr_q = corrected.get("next_question") or {}
+        corr_status = corrected.get("status", "continue")
+        corr_prop = SimpleNamespace(
+            case_update=SimpleNamespace(concepts={}),
+            next_question=SimpleNamespace(**corr_q) if corr_q else None,
+            status=corr_status,
+        )
+        corr_val = validate_llm_proposal(corr_prop, session, session.presentation_domain)
+        if corr_val.valid and corr_prop.next_question:
+            return {"text": corr_prop.next_question.text,
+                    "target_concept": corr_prop.next_question.target_concept,
+                    "source": "corrected_llm",
+                    "provider": corrected.get("provider")}
+
+    fallback = get_fallback_question(session, "primary_symptom")
+    return {"text": fallback["text"], "target_concept": fallback["target_concept"],
+            "source": "fallback_generated", "provider": None}
 
 @router.get("/patient-lookup", response_model=PatientLookupResponse)
 async def patient_lookup(code: str):
@@ -328,19 +396,16 @@ async def start_session(payload: StartSessionRequest):
         concept_metadata=[{"prior_visit": prior_context}] if prior_context else [],
     )
     if use_adaptive:
-        # For returning patients with prior context: open with current concern question
-        # rather than the generic chief complaint question
-        if prior_context and prior_context.get("chief_complaint"):
-            from backend.rules.adaptive_interview import get_fallback_question as _fbq
-            initial_q = _fbq(session, "primary_symptom")
-            session.current_pending_question = initial_q["text"]
-        else:
-            initial_q = get_fallback_question(session, "primary_symptom")
-            session.current_pending_question = initial_q["text"]
+        # Normal path: Q1 comes from the LLM interviewer (same architecture as
+        # later turns). Deterministic fallback only on provider/validation failure.
+        opening = await _resolve_opening_question(session)
+        session.current_pending_question = opening["text"]
+        session.question_source = opening["source"]
         session.asked_questions = [session.current_pending_question]
-        session.asked_concepts = ["primary_symptom"]
+        session.asked_concepts = [opening["target_concept"]]
     db_save_session(session)
-    return StartSessionResponse(session_id=session_id, prior_context_loaded=prior_context_loaded)
+    return StartSessionResponse(session_id=session_id, prior_context_loaded=prior_context_loaded,
+                                question_source=session.question_source if use_adaptive else "unknown")
 
 
 @router.post("/{session_id}/consent", response_model=ConsentResponse)
@@ -462,6 +527,7 @@ async def get_session(session_id: str):
         denied_concepts=session.denied_concepts,
         interview_status=_interview_status(session),
         adaptive_question_limit=get_presentation_profile(session.presentation_domain).max_questions,
+        question_source=getattr(session, "question_source", "unknown"),
     )
 
 @router.post("/{session_id}/answer", response_model=AnswerResponse)
@@ -734,10 +800,15 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     if "primary_symptom" in concepts and "chief_complaint" not in concepts:
         concepts["chief_complaint"] = concepts["primary_symptom"]
 
-    # Ensure current concept is captured if answered
+    # Ensure current concept is captured if answered. The raw answer is filed
+    # under the current concept ONLY when the turn yielded no LLM result at
+    # all (provider failure): on the failure path the doctor must still see
+    # what the patient said. When structured concepts exist, filing the whole
+    # answer under an unrelated current concept (e.g. a severity statement
+    # stored as food_relationship) would wrongly suppress that concept later.
     if _usable_concept_value(payload.answer) and not _usable_concept_value(concepts.get(current_concept)):
-        concepts[current_concept] = payload.answer.strip()
         if not llm_result:
+            concepts[current_concept] = payload.answer.strip()
             needs_review = True
 
     # Presentation domain update
@@ -761,6 +832,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
     # Stage 5: Deterministic Validator
     validation = None
     is_valid = False
+    turn_source = "fallback_generated"
     llm_status = llm_result.get("status", "continue") if llm_result else None
 
     if llm_result and isinstance(llm_result, dict):
@@ -774,6 +846,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         validation = validate_llm_proposal(dummy_prop, session, session.presentation_domain)
         if validation.valid and dummy_prop.next_question:
             is_valid = True
+            turn_source = "llm_generated"
             new_question_text = dummy_prop.next_question.text
             new_target_concept = dummy_prop.next_question.target_concept
         elif validation.valid and dummy_prop.status == "sufficient":
@@ -798,6 +871,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
                     corr_val = validate_llm_proposal(corr_prop, session, session.presentation_domain)
                     if corr_val.valid and corr_prop.next_question:
                         is_valid = True
+                        turn_source = "corrected_llm"
                         new_question_text = corr_prop.next_question.text
                         new_target_concept = corr_prop.next_question.target_concept
                         llm_status = corr_status
@@ -838,6 +912,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
 
     # Stage 9: Persist state & bridge to legacy schema
     bridge_concepts_to_legacy(session)
+    session.question_source = turn_source
 
     answer_record = AnswerRecord(
         question=current_concept,
@@ -863,6 +938,7 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
         adaptive_question_limit=MAX_ADAPTIVE_QUESTIONS,
         mentioned_documents=session.mentioned_documents,
         completion_message=completion_msg,
+        question_source=turn_source,
     )
 
 @router.post("/{session_id}/upload", response_model=UploadResponse)
