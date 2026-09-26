@@ -80,6 +80,12 @@ class Session(BaseModel):
     # Telemetry: how the pending question was produced ("llm_generated",
     # "corrected_llm", "fallback_generated", "unknown"/legacy).
     question_source: str = Field(default="unknown", max_length=30)
+    # Provenance per collected concept: {concept: {source, provider}} where
+    # source is llm | heuristic | patient_raw | clinician-entered.
+    concept_provenance: Dict[str, Any] = Field(default_factory=dict)
+    # Doctor-facing completeness gaps, computed on read (never persisted as
+    # interview state): [{concept, required}].
+    completeness_gaps: List[Dict[str, Any]] = Field(default_factory=list)
     adaptive_question_count: int = Field(default=0)
     mentioned_documents: List[str] = Field(default_factory=list)
     adaptive: bool = Field(default=False)

@@ -3,6 +3,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from backend.models.schema import Session
 from backend.db import get_session, save_session, list_sessions, list_flagged_sessions, list_queued_sessions
+from backend.rules.adaptive_interview import completeness_gaps
 from backend.services.documents import correct_document
 
 import os
@@ -87,6 +88,8 @@ async def get_doctor_session(session_id: str):
     session = get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    # Doctor-facing completeness gaps computed on read (Graph E).
+    session.completeness_gaps = completeness_gaps(session)
     return session
 
 @router.patch("/session/{session_id}", response_model=Session)
@@ -97,23 +100,34 @@ async def patch_doctor_session(session_id: str, patch_data: SessionPatchRequest)
 
     hpi = session.history_of_present_illness
     changed = False
+
+    def _mark_clinician(*keys: str) -> None:
+        for k in keys:
+            session.concept_provenance[k] = {"source": "clinician-entered", "provider": None}
+
     if patch_data.chief_complaint is not None and patch_data.chief_complaint != session.chief_complaint:
         session.chief_complaint = patch_data.chief_complaint
+        _mark_clinician("chief_complaint", "primary_symptom")
         changed = True
     if patch_data.onset is not None and patch_data.onset != hpi.onset:
         hpi.onset = patch_data.onset
+        _mark_clinician("onset")
         changed = True
     if patch_data.duration is not None and patch_data.duration != hpi.duration:
         hpi.duration = patch_data.duration
+        _mark_clinician("duration")
         changed = True
     if patch_data.severity is not None and patch_data.severity != hpi.severity:
         hpi.severity = patch_data.severity
+        _mark_clinician("severity")
         changed = True
     if patch_data.character is not None and patch_data.character != hpi.character:
         hpi.character = patch_data.character
+        _mark_clinician("character")
         changed = True
     if patch_data.associated_symptoms is not None and patch_data.associated_symptoms != hpi.associated_symptoms:
         hpi.associated_symptoms = patch_data.associated_symptoms
+        _mark_clinician("associated_symptoms")
         changed = True
 
     if changed:
@@ -127,6 +141,7 @@ async def patch_doctor_session(session_id: str, patch_data: SessionPatchRequest)
         session.doctor_review.confirmed = patch_data.doctor_confirmed
 
     save_session(session)
+    session.completeness_gaps = completeness_gaps(session)
     return session
 
 @router.patch("/session/{session_id}/document/{index}", response_model=Session)

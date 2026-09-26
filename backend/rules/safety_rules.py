@@ -11,6 +11,14 @@ from backend.models.schema import Session
 # Conservative, explicit red-flag terms. Mirrors the approved Phase 1 list plus
 # phrases the Stitch P05/D04 references use (chest tightness/radiating).
 # Any rule that was uncertain was left OUT rather than guessed at.
+#
+# Spec-sourced escalation phrases (clinical_interview_spec_v1.md §4.5/5.5/6.5,
+# packet GI-10..13/MS-11..14/RS-10..14): patient-wordable substrings only.
+# Combination presentations (e.g. fever + joint swelling) need clinician
+# thresholds and are deliberately NOT encoded here (see questionnaire §2.4).
+#
+# Hindi/Gujarati entries are plain translations of the SAME gate concepts
+# (an HI/GU red-flag utterance must escalate exactly like its EN twin).
 RED_FLAG_PHRASES: List[str] = [
     "chest pain",
     "chest tightness",
@@ -24,6 +32,86 @@ RED_FLAG_PHRASES: List[str] = [
     "severe allergic",
     "anaphylaxis",
     "cardiac arrest",
+    # Spec §4.5/§6.5 GI + respiratory bleeding / obstruction flags
+    "vomiting blood",
+    "vomit blood",
+    "blood in vomit",
+    "blood in stool",
+    "bloody stool",
+    "black stool",
+    "black tarry stool",
+    "black and tarry",
+    "tarry stool",
+    "blood in sputum",
+    "blood in my sputum",
+    "bloody sputum",
+    "sputum with blood",
+    "coughing blood",
+    "coughing up blood",
+    "cough up blood",
+    "yellow eyes",
+    "turned yellow",
+    "yellow skin",
+    "jaundice",
+    "cannot swallow",
+    "difficulty swallowing",
+    "severe abdominal pain",
+    "severe stomach pain",
+    "choking",
+    "blue lips",
+    "bluish lips",
+    "turned blue",
+    "breathless at rest",
+    "breathlessness at rest",
+    # Spec §5.5 musculoskeletal flags
+    "bear weight",
+    "hot swollen joint",
+    "foot drop",
+    "saddle numbness",
+    "loss of bladder",
+    "loss of bowel",
+    "sudden weakness",
+    # Hindi twins (Devanagari)
+    "सीने में दर्द",
+    "छाती में दर्द",
+    "सांस लेने में",
+    "सांस फूल",
+    "खून बह रहा",
+    "बेहोश",
+    "खून की उल्टी",
+    "काला मल",
+    "मल में खून",
+    "बलगम में खून",
+    "खून वाली खांसी",
+    "पीली आंखें",
+    "पीलिया",
+    "निगलने में तकलीफ",
+    "पेट में तेज दर्द",
+    "दम घुट",
+    "नीले होंठ",
+    "आराम करते समय सांस फूलना",
+    "आत्महत्या",
+    "लकवा",
+    # Gujarati twins
+    "છાતીમાં દુખાવો",
+    "શ્વાસ લેવામાં",
+    "શ્વાસ ફૂલ",
+    "લોહી વહી રહ્યું",
+    "બેભાન",
+    "લોહીની ઊલટી",
+    "કાળો મળ",
+    "મળમાં લોહી",
+    "ગળફામાં લોહી",
+    "લોહીવાળી ખાંસી",
+    "પીળી આંખો",
+    "કમળો",
+    "ગળવામાં તકલીફ",
+    "પેટમાં તીવ્ર દુખાવો",
+    "ગૂંગળામણ",
+    "ભૂરા હોઠ",
+    "આરામમાં શ્વાસ ફૂલવો",
+    "આત્મહત્યા",
+    "લકવો",
 ]
 
 @dataclass

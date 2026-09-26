@@ -24,6 +24,7 @@ from backend.rules.adaptive_interview import (
     select_next_question,
     evaluate_conversational_sufficiency,
     evaluate_sufficiency,
+    completeness_gaps,
     bridge_concepts_to_legacy,
     get_presentation_profile,
     get_domain_knowledge,
@@ -260,6 +261,8 @@ class SessionResponse(BaseModel):
     interview_status: str = "in_progress"
     adaptive_question_limit: int = MAX_ADAPTIVE_QUESTIONS
     question_source: str = "unknown"
+    concept_provenance: Dict[str, Any] = Field(default_factory=dict)
+    completeness_gaps: List[Dict[str, Any]] = Field(default_factory=list)
 
 class PatientLookupResponse(BaseModel):
     found: bool
@@ -528,6 +531,8 @@ async def get_session(session_id: str):
         interview_status=_interview_status(session),
         adaptive_question_limit=get_presentation_profile(session.presentation_domain).max_questions,
         question_source=getattr(session, "question_source", "unknown"),
+        concept_provenance=getattr(session, "concept_provenance", {}) or {},
+        completeness_gaps=completeness_gaps(session),
     )
 
 @router.post("/{session_id}/answer", response_model=AnswerResponse)
@@ -811,19 +816,41 @@ async def submit_answer(session_id: str, payload: AnswerRequest):
             concepts[current_concept] = payload.answer.strip()
             needs_review = True
 
-    # Presentation domain update
+    # Presentation domain update.
+    # Obsolete prior context (Graph H): a returning session inherits the prior
+    # visit's domain, but the patient's FIRST answer in the new visit is
+    # authoritative — if it alone classifies to a different non-general
+    # domain, the new complaint takes over. Later turns never re-route.
     if extracted_domain in ALL_DOMAINS and (not session.presentation_domain or session.presentation_domain == DOMAIN_GENERAL):
         session.presentation_domain = extracted_domain
     elif not session.presentation_domain or session.presentation_domain == DOMAIN_GENERAL:
         detected = classify_presentation_domain(f"{payload.answer} {session.chief_complaint or ''}")
         if detected != DOMAIN_GENERAL:
             session.presentation_domain = detected
+    elif (session.visit_type == "returning" and session.adaptive_question_count == 0
+            and not session.collected_concepts):
+        fresh_detected = classify_presentation_domain(payload.answer)
+        if fresh_detected != DOMAIN_GENERAL and fresh_detected != session.presentation_domain:
+            session.presentation_domain = fresh_detected
 
-    # Update collected concepts in session
+    # Update collected concepts in session (+ Graph F provenance labels)
+    llm_keys = set()
+    if llm_result and isinstance(llm_result, dict):
+        llm_keys = set(((llm_result.get("case_update") or {}).get("concepts") or {}).keys())
+    heur_keys = set(text_concepts.keys())
     for c_k, c_v in concepts.items():
         if _usable_concept_value(c_v):
             prev = session.collected_concepts.get(c_k)
             session.collected_concepts[c_k] = merge_extracted_concept(prev, c_v)
+            # Normalization copies (complaint -> primary_symptom/chief_complaint)
+            # inherit the origin of their source key.
+            norm_src = "complaint" if c_k in ("primary_symptom", "chief_complaint") else c_k
+            if c_k in llm_keys or norm_src in llm_keys:
+                session.concept_provenance[c_k] = {"source": "llm", "provider": provider_used}
+            elif c_k in heur_keys or norm_src in heur_keys:
+                session.concept_provenance[c_k] = {"source": "heuristic", "provider": None}
+            else:
+                session.concept_provenance[c_k] = {"source": "patient_raw", "provider": None}
 
     # Documents
     doc_matches = extract_mentioned_documents(payload.answer)

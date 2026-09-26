@@ -190,3 +190,82 @@ def test_direct_emergency_endpoint_flags_and_alerts(client):
     em = client.get("/doctor/emergency").json()
     assert sid in [e["session_id"] for e in em]
 
+
+# ---------------------------------------------------------------------------
+# Graph D: spec-sourced escalation phrases + multilingual twins.
+# Source: clinical_interview_spec_v1.md §4.5/5.5/6.5, packet GI-10..13,
+# MS-11..14, RS-10..14. Combination presentations need clinician thresholds
+# and are deliberately NOT encoded (questionnaire §2.4 pending).
+# ---------------------------------------------------------------------------
+
+def test_spec_bleeding_flags_are_caught(client):
+    from backend.rules.safety_rules import evaluate_safety
+    from backend.models.schema import Session, Patient, HistoryOfPresentIllness, DoctorReview
+
+    def blank():
+        return Session(session_id="x", patient=Patient(name="P", age=30, gender="m"),
+                       history_of_present_illness=HistoryOfPresentIllness(),
+                       doctor_review=DoctorReview())
+
+    for text in ["I am vomiting blood.", "My stool is black and tarry.",
+                 "Blood in my sputum this morning.", "I am coughing up blood."]:
+        assert evaluate_safety(text, blank()).flagged is True, text
+
+
+def test_spec_systemic_flags_are_caught(client):
+    from backend.rules.safety_rules import evaluate_safety
+    from backend.models.schema import Session, Patient, HistoryOfPresentIllness, DoctorReview
+
+    def blank():
+        return Session(session_id="x", patient=Patient(name="P", age=30, gender="m"),
+                       history_of_present_illness=HistoryOfPresentIllness(),
+                       doctor_review=DoctorReview())
+
+    for text in ["My eyes have turned yellow.", "I cannot bear weight on my leg.",
+                 "My lips turned blue.", "I have a hot swollen joint with fever.",
+                 "I cannot swallow food.", "I am choking."]:
+        assert evaluate_safety(text, blank()).flagged is True, text
+
+
+def test_hindi_gujarati_red_flags_escalate_like_english(client):
+    sid = _start_and_code(client)
+    r = client.post(f"/session/{sid}/answer", json={"answer": "मुझे सीने में दर्द है"})
+    assert r.json()["red_flag"] is True
+    g = client.get(f"/session/{sid}").json()
+    assert g["safety_flagged"] is True
+    assert g["safety_detail"] == ["सीने में दर्द"]
+
+    sid2 = _start_and_code(client)
+    r2 = client.post(f"/session/{sid2}/answer", json={"answer": "મને છાતીમાં દુખાવો છે"})
+    assert r2.json()["red_flag"] is True
+    assert client.get(f"/session/{sid2}").json()["safety_flagged"] is True
+
+
+def test_benign_utterances_are_not_flagged(client):
+    from backend.rules.safety_rules import evaluate_safety
+    from backend.models.schema import Session, Patient, HistoryOfPresentIllness, DoctorReview
+
+    def blank():
+        return Session(session_id="x", patient=Patient(name="P", age=30, gender="m"),
+                       history_of_present_illness=HistoryOfPresentIllness(),
+                       doctor_review=DoctorReview())
+
+    for text in ["I have mild acidity after meals.", "मुझे हल्की गैस है",
+                 "My knee aches when climbing stairs.",
+                 "Yellow dal is my favourite food."]:
+        assert evaluate_safety(text, blank()).flagged is False, text
+
+
+def test_safety_gate_runs_before_llm_and_persists_audit(client):
+    # LLM down + red-flag answer -> safety still catches, audits, blocks token.
+    sid = _start_and_code(client)
+    r = client.post(f"/session/{sid}/answer", json={"answer": "vomiting blood since morning"})
+    assert r.json()["red_flag"] is True
+    g = client.get(f"/session/{sid}").json()
+    assert g["safety_flagged"] is True
+    assert g["safety_flag_time"] is not None
+    assert any("blood" in str(d).lower() for d in g["safety_detail"])
+    assert any(a.get("red_flag") for a in g["raw_answers"])
+    tok = client.post(f"/session/{sid}/token")
+    assert tok.status_code == 403
+

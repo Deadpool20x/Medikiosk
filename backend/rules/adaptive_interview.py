@@ -1161,6 +1161,37 @@ def evaluate_sufficiency(session_like: Any) -> bool:
     return evaluate_conversational_sufficiency(session_like, getattr(session_like, "llm_status", None))
 
 
+def completeness_gaps(session_like: Any) -> List[Dict[str, Any]]:
+    """Doctor-facing list of not-gathered history areas (Graph E).
+
+    Required information constrains COMPLETENESS, never question order: the
+    LLM chooses questions dynamically; this verifier only reports what is
+    still missing. Each entry is {"concept": key, "required": bool}.
+    Denied concepts count as established (absent finding), not gaps.
+    """
+    domain = getattr(session_like, "presentation_domain", None) or DOMAIN_GENERAL
+    knowledge = get_domain_knowledge(domain)
+    collected = getattr(session_like, "collected_concepts", {}) or {}
+    asked_concepts = getattr(session_like, "asked_concepts", []) or []
+    denied = getattr(session_like, "denied_concepts", []) or []
+    denied_keys = denied_symptom_concept_keys(denied)
+
+    def _missing(concept: str) -> bool:
+        return (
+            (concept not in collected or not str(collected[concept]).strip())
+            and concept not in denied_keys
+        )
+
+    gaps: List[Dict[str, Any]] = []
+    for mc in knowledge.mandatory_concepts:
+        if _missing(mc):
+            gaps.append({"concept": mc, "required": True})
+    for rc in knowledge.relevant_concepts:
+        if rc not in knowledge.mandatory_concepts and _missing(rc) and rc not in asked_concepts:
+            gaps.append({"concept": rc, "required": False})
+    return gaps
+
+
 # =========================================================================
 # Fallback Question Engine
 # =========================================================================
