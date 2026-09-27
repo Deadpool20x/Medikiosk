@@ -17,6 +17,20 @@ import {
 // Base URL is read safely from public env var with fallback
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+/**
+ * Network guard for §10 Joint 1: a dead backend must surface
+ * "connection issue, your progress is saved" — never a raw TypeError.
+ */
+async function safeFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(input, init);
+  } catch {
+    throw new Error(
+      "Connection issue — your progress is saved. Please check the kiosk connection and retry."
+    );
+  }
+}
+
 export interface HealthCheckResponse {
   status: string;
 }
@@ -45,7 +59,7 @@ async function handleResponse<T>(response: Response, defaultMessage: string): Pr
 }
 
 export async function checkBackendHealth(): Promise<HealthCheckResponse> {
-  const response = await fetch(`${API_BASE_URL}/health`, {
+  const response = await safeFetch(`${API_BASE_URL}/health`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -63,7 +77,7 @@ export async function startPatientSession(
   adaptive: boolean = true,
   prior_patient_code?: string,
 ): Promise<StartSessionResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/start`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/start`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -75,7 +89,7 @@ export async function startPatientSession(
 }
 
 export async function lookupPatient(code: string): Promise<{ found: boolean; visit_date: string; chief_complaint: string; presentation_domain: string }> {
-  const response = await fetch(`${API_BASE_URL}/session/patient-lookup?code=${encodeURIComponent(code)}`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/patient-lookup?code=${encodeURIComponent(code)}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
@@ -84,7 +98,7 @@ export async function lookupPatient(code: string): Promise<{ found: boolean; vis
 }
 
 export async function submitConsent(sessionId: string): Promise<ConsentResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/consent`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/consent`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -96,7 +110,7 @@ export async function submitConsent(sessionId: string): Promise<ConsentResponse>
 }
 
 export async function getPatientCode(sessionId: string): Promise<PatientCodeResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/patient-code`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/patient-code`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -107,7 +121,7 @@ export async function getPatientCode(sessionId: string): Promise<PatientCodeResp
 }
 
 export async function submitAnswer(sessionId: string, answer: string): Promise<AnswerResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/answer`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/answer`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -119,7 +133,7 @@ export async function submitAnswer(sessionId: string, answer: string): Promise<A
 }
 
 export async function triggerEmergency(sessionId: string): Promise<{ status: string; message: string; patient_code?: string; session_id?: string }> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/emergency`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/emergency`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -130,7 +144,7 @@ export async function triggerEmergency(sessionId: string): Promise<{ status: str
 }
 
 export async function getEmergencySessions(): Promise<EmergencyItem[]> {
-  const response = await fetch(`${API_BASE_URL}/doctor/emergency`, {
+  const response = await safeFetch(`${API_BASE_URL}/doctor/emergency`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -142,7 +156,7 @@ export async function getEmergencySessions(): Promise<EmergencyItem[]> {
 }
 
 export async function getSession(sessionId: string): Promise<SessionResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}`, {
     method: "GET",
     headers: {
       "Content-Type": "application/json",
@@ -154,7 +168,7 @@ export async function getSession(sessionId: string): Promise<SessionResponse> {
 }
 
 export async function completeDocumentIntake(sessionId: string): Promise<ConsentResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/documents-complete`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/documents-complete`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -167,7 +181,7 @@ export async function completeDocumentIntake(sessionId: string): Promise<Consent
 export async function uploadDocument(sessionId: string, file: File): Promise<UploadResponse> {
   const form = new FormData();
   form.append("file", file);
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/upload`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/upload`, {
     method: "POST",
     body: form,
   });
@@ -180,7 +194,7 @@ export async function correctDocument(
   index: number,
   payload: DocumentCorrectionRequest
 ): Promise<SessionResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/document/${index}`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/document/${index}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -192,7 +206,7 @@ export async function correctDocument(
 }
 
 export async function requestToken(sessionId: string): Promise<TokenResponse> {
-  const response = await fetch(`${API_BASE_URL}/session/${sessionId}/token`, {
+  const response = await safeFetch(`${API_BASE_URL}/session/${sessionId}/token`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -204,7 +218,7 @@ export async function requestToken(sessionId: string): Promise<TokenResponse> {
 
 export async function getDoctorQueue(department?: string): Promise<QueueItem[]> {
   const qs = department ? `?department=${encodeURIComponent(department)}` : "";
-  const response = await fetch(`${API_BASE_URL}/doctor/queue${qs}`, {
+  const response = await safeFetch(`${API_BASE_URL}/doctor/queue${qs}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
@@ -214,7 +228,7 @@ export async function getDoctorQueue(department?: string): Promise<QueueItem[]> 
 }
 
 export async function getDoctorSession(sessionId: string): Promise<Session> {
-  const response = await fetch(`${API_BASE_URL}/doctor/session/${sessionId}`, {
+  const response = await safeFetch(`${API_BASE_URL}/doctor/session/${sessionId}`, {
     method: "GET",
     headers: { "Content-Type": "application/json" },
     cache: "no-store",
@@ -224,7 +238,7 @@ export async function getDoctorSession(sessionId: string): Promise<Session> {
 }
 
 export async function patchDoctorSession(sessionId: string, patch: DoctorSessionPatch): Promise<Session> {
-  const response = await fetch(`${API_BASE_URL}/doctor/session/${sessionId}`, {
+  const response = await safeFetch(`${API_BASE_URL}/doctor/session/${sessionId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(patch),
@@ -238,7 +252,7 @@ export async function correctDoctorDocument(
   index: number,
   payload: DocumentCorrectionRequest
 ): Promise<Session> {
-  const response = await fetch(`${API_BASE_URL}/doctor/session/${sessionId}/document/${index}`, {
+  const response = await safeFetch(`${API_BASE_URL}/doctor/session/${sessionId}/document/${index}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

@@ -69,6 +69,12 @@ class DocumentCorrectionRequest(BaseModel):
     dose: Optional[str] = None
     frequency: Optional[str] = None
 
+
+class CaseSummaryResponse(BaseModel):
+    summary: str
+    provider: str
+    generated_at: str
+
 @router.get("/sessions", response_model=List[SessionSummary])
 async def get_doctor_sessions():
     sessions = list_sessions()
@@ -165,3 +171,74 @@ async def correct_doctor_document(session_id: str, index: int, payload: Document
         raise HTTPException(status_code=404, detail="Document not found")
     save_session(session)
     return session
+
+
+# Spec §7.3: physician-readable prose generated ONLY from already-structured
+# data (never raw text, never new facts). Transient: nothing is persisted,
+# nothing is diagnosed. 502 + retryable when no provider or output invalid.
+@router.post("/session/{session_id}/summary", response_model=CaseSummaryResponse)
+async def generate_case_summary(session_id: str):
+    from datetime import datetime, timezone
+    from backend.services.llm_provider import iter_llm_providers
+    from backend.rules.adaptive_interview import PROHIBITED_QUESTION_PATTERNS
+    import re
+
+    session = get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    structured = {
+        "chief_complaint": session.chief_complaint,
+        "history_of_present_illness": session.history_of_present_illness.model_dump(),
+        "collected_concepts": session.collected_concepts,
+        "concept_provenance": session.concept_provenance,
+        "completeness_gaps": completeness_gaps(session),
+        "documents": [
+            {"type": d.type, "extracted_value": d.extracted_value,
+             "needs_review": d.needs_review,
+             "manually_corrected": d.manually_corrected} for d in session.documents
+        ],
+        "safety_flagged": session.safety_flagged,
+        "doctor_edited": session.doctor_review.edited,
+        "doctor_confirmed": session.doctor_review.confirmed,
+    }
+    system_prompt = (
+        "Convert this structured clinical data into a short, factual summary for a "
+        "physician. Do not add any information not present in the input data. Do not "
+        "suggest a diagnosis or treatment. If a field is missing or null, state that it is "
+        "not available rather than omitting it silently."
+    )
+    import json as _json
+    user_prompt = f"Input: {_json.dumps(structured, ensure_ascii=False)}"
+
+    try:
+        providers = iter_llm_providers()
+    except RuntimeError:
+        raise HTTPException(status_code=502, detail={"error": "summary_unavailable",
+                                                     "reason": "No LLM provider configured",
+                                                     "retryable": True})
+    last_error = "unknown"
+    for provider in providers:
+        try:
+            text = await provider.generate(user_prompt, system_prompt=system_prompt)
+            if not text or not text.strip():
+                last_error = f"{provider.provider_name} returned empty output"
+                continue
+            lowered = text.lower()
+            if "{" in text or "}" in text or "```" in text:
+                last_error = f"{provider.provider_name} returned non-prose output"
+                continue
+            if any(re.search(p, lowered) for p in PROHIBITED_QUESTION_PATTERNS):
+                last_error = f"{provider.provider_name} output violated scope ban"
+                continue
+            return CaseSummaryResponse(
+                summary=text.strip()[:2000],
+                provider=provider.provider_name,
+                generated_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception as e:  # noqa: BLE001 - try next provider in chain
+            last_error = str(e)[:200]
+            continue
+    raise HTTPException(status_code=502, detail={"error": "summary_unavailable",
+                                                 "reason": f"All providers failed: {last_error}",
+                                                 "retryable": True})

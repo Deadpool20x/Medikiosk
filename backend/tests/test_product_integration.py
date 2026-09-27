@@ -300,3 +300,65 @@ def test_gu_journey_completes_with_gujarati_messaging():
         assert c.get(f"/doctor/session/{sid}").json()["language"] == "gu"
     finally:
         _teardown(tmp)
+
+
+# --- Spec §7.3: physician prose summary from structured data only ------------
+
+def _stub_provider(text, name="stub"):
+    class _P:
+        provider_name = name
+
+        async def generate(self, prompt, system_prompt=None, **kwargs):
+            return text
+
+    return _P()
+
+
+def test_case_summary_uses_structured_data_only():
+    import backend.services.llm_provider as _lp
+    c, tmp = _client()
+    try:
+        sid, _ = _new(c, name="Sum Pat")
+        seen = {}
+        provider = _stub_provider("Patient reports stomach burning. Duration not available.")
+
+        async def _spy(prompt, system_prompt=None, **kwargs):
+            seen["system"] = system_prompt
+            seen["user"] = prompt
+            return "Patient reports stomach burning. Duration not available."
+
+        provider.generate = _spy  # type: ignore[method-assign]
+        with patch.object(_lp, "iter_llm_providers", return_value=[provider]):
+            r = c.post(f"/doctor/session/{sid}/summary")
+        assert r.status_code == 200
+        assert "factual summary" in seen["system"]
+        assert "chief_complaint" in seen["user"]  # structured input, never raw-only
+        assert r.json()["provider"] == "stub"
+        assert r.json()["summary"]
+    finally:
+        _teardown(tmp)
+
+
+def test_case_summary_rejects_diagnosis_and_empty_output():
+    import backend.services.llm_provider as _lp
+    c, tmp = _client()
+    try:
+        sid, _ = _new(c, name="Sum Pat 2")
+        with patch.object(_lp, "iter_llm_providers",
+                          return_value=[_stub_provider("You have GERD, take antacids.", "bad")]):
+            r = c.post(f"/doctor/session/{sid}/summary")
+        assert r.status_code == 502
+        assert r.json()["detail"]["retryable"] is True
+        with patch.object(_lp, "iter_llm_providers", return_value=[]):
+            r2 = c.post(f"/doctor/session/{sid}/summary")
+        assert r2.status_code == 502
+    finally:
+        _teardown(tmp)
+
+
+def test_case_summary_unknown_session_is_404():
+    c, tmp = _client()
+    try:
+        assert c.post("/doctor/session/nope/summary").status_code == 404
+    finally:
+        _teardown(tmp)
