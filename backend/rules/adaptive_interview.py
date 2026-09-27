@@ -942,8 +942,12 @@ def validate_llm_proposal(
     # zero reviewed) must never appear as patient-facing labels until a
     # clinician resolves them. Plain feature language is unaffected.
     from backend.rules.clinical_review import CONTESTED_CORRELATES
+    q_nospace = re.sub(r"\s+", "", q_lower)
     for label in CONTESTED_CORRELATES:
-        if re.search(r"\b" + re.escape(label) + r"\b", q_lower):
+        # Spelling variants without spaces ("sandhigatavata") match too.
+        if re.search(r"\b" + re.escape(label) + r"\b", q_lower) or re.escape(
+            label.replace(" ", "")
+        ) in q_nospace:
             reasons.append(
                 f"Question uses unvalidated clinical label '{label}' "
                 "(requires clinician review)"

@@ -27,7 +27,6 @@ CONTESTED_CORRELATES = [
     "grahani",
     "amavata",
     "sandhigata vata",
-    "sandhigatavata",
     "grudhrasi",
     "vatarakta",
     "tamaka shwasa",
@@ -96,6 +95,23 @@ def reviewed_count() -> int:
 
 REVIEW_DECISIONS = ("CONFIRMED", "REJECTED", "REVISED")
 
+# Packet-native decision codes (clinician_review_results_v1.md §1–§4 tables use
+# Keep/Modify/Remove; §2.4-style combination questions may be Deferred).
+# Deterministic transcription map — the packet wording is preserved, the
+# stored decision is normalized. DEFERRED never confirms anything.
+PACKET_DECISIONS = {
+    "Keep": "CONFIRMED",
+    "Modify": "REVISED",
+    "Remove": "REJECTED",
+    "Defer": "DEFERRED",
+}
+
+# Questionnaire §5 usability rulings. Orthogonal to confirmation: a term can
+# be clinically recognized yet banned from patient-facing use.
+USABILITY = ("patient-usable", "physician-only", "banned")
+# Packet §5 checkbox codes.
+USABILITY_CODES = {"P": "patient-usable", "M": "physician-only", "N": "banned"}
+
 
 def apply_review(
     ledger: Dict[str, Any],
@@ -106,14 +122,26 @@ def apply_review(
     date: str,
     notes: str = "",
     final_wording: str = "",
+    usability: Optional[str] = None,
+    required: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Record one clinician decision, returning an updated ledger copy.
 
-    Raises ValueError when the record is incomplete (unknown id, bad
-    decision, missing reviewer/date). The caller's mapping is not mutated.
+    `decision` accepts code decisions (CONFIRMED/REJECTED/REVISED) or
+    packet-native codes (Keep/Modify/Remove/Defer). `usability` accepts
+    §5 codes (P/M/N) or full values; it is recorded only and has no runtime
+    effect until a later, explicitly reviewed runtime change. `required`
+    transcribes the packet M/O column. Raises ValueError when the record is
+    incomplete. The caller's mapping is not mutated.
     """
-    if decision not in REVIEW_DECISIONS:
-        raise ValueError(f"decision must be one of {REVIEW_DECISIONS}")
+    normalized = PACKET_DECISIONS.get(decision, decision)
+    if normalized not in REVIEW_DECISIONS + ("DEFERRED",):
+        raise ValueError(f"decision must be one of {list(PACKET_DECISIONS) + list(REVIEW_DECISIONS)}")
+    usability_value = None
+    if usability is not None:
+        usability_value = USABILITY_CODES.get(usability, usability)
+        if usability_value not in USABILITY:
+            raise ValueError(f"usability must be one of {list(USABILITY_CODES) + list(USABILITY)}")
     if not (reviewer or "").strip():
         raise ValueError("reviewer identity is required; no anonymous sign-off")
     if not (date or "").strip():
@@ -121,16 +149,49 @@ def apply_review(
     items = [dict(i) for i in ledger.get("items", [])]
     for item in items:
         if item.get("id") == entry_id:
-            item["review_status"] = "reviewed" if decision == "CONFIRMED" else "provisional"
-            item["review_decision"] = decision
+            # Only an explicit CONFIRMED counts as reviewed; everything else
+            # (including DEFERRED) stays provisional and never confirms.
+            item["review_status"] = "reviewed" if normalized == "CONFIRMED" else "provisional"
+            item["review_decision"] = normalized
             item["reviewer"] = reviewer.strip()
             item["review_date"] = date.strip()
             if notes:
                 item["notes"] = ((item.get("notes") or "") + f" | Review: {notes}").strip(" |")
             if final_wording:
                 item["accepted_terminology"] = final_wording
+            if usability_value is not None:
+                item["usability"] = usability_value
+            if required is not None:
+                item["required"] = bool(required)
             return {**ledger, "items": items}
     raise ValueError(f"unknown ledger entry: {entry_id}")
+
+
+def transcribe_packet_row(
+    ledger: Dict[str, Any],
+    entry_id: str,
+    *,
+    code: str,
+    reviewer: str,
+    date: str,
+    rationale: str = "",
+    final_wording: str = "",
+    usability_code: Optional[str] = None,
+    mandatory: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Deterministic transcription of one packet table row (Graphs C/D).
+
+    Maps the packet's own columns (K/M/R + M/O + §5 P/M/N) onto apply_review
+    without reinterpreting clinical content: rationale becomes the note,
+    final wording amends accepted terminology, nothing else is inferred.
+    """
+    if code not in PACKET_DECISIONS:
+        raise ValueError(f"code must be one of {list(PACKET_DECISIONS)}")
+    return apply_review(
+        ledger, entry_id, decision=code, reviewer=reviewer, date=date,
+        notes=rationale, final_wording=final_wording,
+        usability=usability_code, required=mandatory,
+    )
 
 
 # ---------------------------------------------------------------------------

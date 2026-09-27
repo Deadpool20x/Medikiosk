@@ -181,8 +181,7 @@ def test_insufficient_status_fails_safely():
         assert not is_patient_usable(term)
 
 
-def test_safety_gate_needs_no_ledger():
-    # Graph F: emergency behavior is independent of review state, even when
+def test_safety_gate_needs_no_ledger():    # Graph F: emergency behavior is independent of review state, even when
     # the ledger itself is unreadable.
     from unittest.mock import patch
     from backend.rules import safety_rules, clinical_review
@@ -196,3 +195,120 @@ def test_safety_gate_needs_no_ledger():
     with patch.object(clinical_review, "load_ledger", side_effect=RuntimeError("ledger gone")):
         assert safety_rules.evaluate_safety("severe chest pain", blank()).flagged is True
         assert clinical_review.clinical_mentions(blank()) == []
+
+
+# ---------------------------------------------------------------------------
+# Graphs B/C/D/E/F/G: packet-native transcription, usability firewall,
+# correlate-agree isolation, ledger/module drift guard, combination items.
+# ---------------------------------------------------------------------------
+
+def test_transcribe_keep_confirms_with_reviewer_evidence():
+    from backend.rules.clinical_review import (
+        transcribe_packet_row, load_ledger, get_entry, reviewed_count)
+    import copy
+    draft = copy.deepcopy(load_ledger())
+    updated = transcribe_packet_row(
+        draft, "H-GI-3", code="Keep", reviewer="Dr. Actual, BAMS",
+        date="2026-10-01", rationale="history essential", mandatory=True)
+    row = next(i for i in updated["items"] if i["id"] == "H-GI-3")
+    assert row["review_decision"] == "CONFIRMED"
+    assert row["review_status"] == "reviewed"
+    assert row["reviewer"] == "Dr. Actual, BAMS"
+    assert row["required"] is True
+    # shipped ledger untouched
+    assert get_entry("H-GI-3")["reviewer"] is None
+    assert reviewed_count() == 0
+
+
+def test_transcribe_modify_records_wording_and_usability():
+    from backend.rules.clinical_review import transcribe_packet_row, load_ledger
+    import copy
+    draft = copy.deepcopy(load_ledger())
+    updated = transcribe_packet_row(
+        draft, "T-GI-01", code="Modify", reviewer="Dr. Actual, BAMS",
+        date="2026-10-01", rationale="pair with plain phrase",
+        final_wording="Agni (digestive strength)", usability_code="M")
+    row = next(i for i in updated["items"] if i["id"] == "T-GI-01")
+    assert row["review_decision"] == "REVISED"
+    assert row["review_status"] == "provisional"  # revised wording needs re-review
+    assert row["accepted_terminology"] == "Agni (digestive strength)"
+    assert row["usability"] == "physician-only"
+
+
+def test_transcribe_remove_and_defer_never_confirm():
+    from backend.rules.clinical_review import transcribe_packet_row, load_ledger
+    import copy
+    draft = copy.deepcopy(load_ledger())
+    removed = transcribe_packet_row(
+        draft, "T-MS-01", code="Remove", reviewer="Dr. Actual, BAMS",
+        date="2026-10-01", rationale="not for kiosk")
+    assert next(i for i in removed["items"] if i["id"] == "T-MS-01")["review_decision"] == "REJECTED"
+    deferred = transcribe_packet_row(
+        draft, "CB-02", code="Defer", reviewer="Dr. Actual, BAMS",
+        date="2026-10-01", rationale="needs threshold discussion")
+    row = next(i for i in deferred["items"] if i["id"] == "CB-02")
+    assert row["review_decision"] == "DEFERRED"
+    assert row["review_status"] == "provisional"
+
+
+def test_transcribe_rejects_unknown_codes_and_bad_usability():
+    from backend.rules.clinical_review import transcribe_packet_row, load_ledger
+    import copy
+    import pytest
+    draft = copy.deepcopy(load_ledger())
+    with pytest.raises(ValueError):
+        transcribe_packet_row(draft, "H-GI-3", code="Maybe",
+                              reviewer="Dr X", date="2026-10-01")
+    with pytest.raises(ValueError):
+        transcribe_packet_row(draft, "H-GI-3", code="Keep",
+                              reviewer="Dr X", date="2026-10-01",
+                              usability_code="Z")
+
+
+def test_correlate_agree_changes_no_runtime_authority():
+    # §6 Agree on a correlate is recorded as a note; it must NOT make the
+    # term patient-usable nor lift the validator block (§5 rules separately).
+    from backend.rules.clinical_review import (
+        apply_review, load_ledger, is_patient_usable)
+    from backend.rules.adaptive_interview import validate_llm_proposal
+    import copy
+    draft = copy.deepcopy(load_ledger())
+    updated = apply_review(draft, "T-GI-08", decision="REVISED",
+                           reviewer="Dr. Actual, BAMS", date="2026-10-01",
+                           notes="correlate agreed with nuance")
+    row = next(i for i in updated["items"] if i["id"] == "T-GI-08")
+    assert "correlate agreed" in row["notes"]
+    assert is_patient_usable("amlapitta") is False
+    prop = SimpleNamespace(
+        case_update=SimpleNamespace(concepts={}),
+        next_question=SimpleNamespace(text="Do you have amlapitta?",
+                                      target_concept="associated_symptoms",
+                                      reason="r", priority="normal"),
+        status="continue")
+    sess = SimpleNamespace(presentation_domain="digestive", collected_concepts={},
+                           asked_concepts=["primary_symptom"], asked_questions=[],
+                           adaptive_question_count=1, denied_concepts=[], language="en")
+    assert validate_llm_proposal(prop, sess, "digestive").valid is False
+
+
+def test_runtime_correlates_all_trace_to_ledger():
+    # Drift guard: every runtime-blocked correlate must exist in the ledger,
+    # so a JSON transcription can never silently desync from enforcement.
+    from backend.rules.clinical_review import CONTESTED_CORRELATES, ledger_items
+    blob = " ".join(
+        f"{i.get('concept','')} {i.get('accepted_terminology','')} {i.get('notes','')}".lower()
+        for i in ledger_items())
+    for correlate in CONTESTED_CORRELATES:
+        assert correlate in blob, correlate
+
+
+def test_combination_items_are_structured_open_questions():
+    from backend.rules.clinical_review import get_entry, ledger_items
+    cbs = [i for i in ledger_items() if i["id"].startswith("CB-")]
+    assert {i["id"] for i in cbs} == {"CB-01", "CB-02", "CB-03", "CB-04", "CB-05"}
+    for item in cbs:
+        assert item["review_status"] == "provisional"
+        assert item["reviewer"] is None
+        assert item["required"] is False
+        assert "No threshold encoded" in item["notes"]
+    assert get_entry("CB-02")["concept"] == "CB wasting triad"
