@@ -70,13 +70,13 @@ export default function HomePage() {
         </div>
         <nav className="mk-p01-header__nav" aria-label={pt(selectedLanguage, "a11y_workflow")}>
           {NAV_KEYS.map((key, i) => (
-            <button
+            <span
               key={key}
+              aria-current={i === 0 ? "step" : undefined}
               className={`mk-p01-nav__item ${i === 0 ? "mk-p01-nav__item--active" : ""}`}
-              type="button"
             >
               {pt(selectedLanguage, key)}
-            </button>
+            </span>
           ))}
         </nav>
         <div className="mk-p01-header__right">
@@ -100,7 +100,8 @@ export default function HomePage() {
           >
             <span aria-hidden="true">🚨</span> {pt(selectedLanguage, "emerg_btn")}
           </button>
-          <button className="mk-p01-header__action" aria-label={pt(selectedLanguage, "p01_reset")} type="button">
+          <button className="mk-p01-header__action" aria-label={pt(selectedLanguage, "p01_reset")} type="button"
+            onClick={() => { setSelectedLanguage("en"); setVisitType("new"); }}>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" /></svg>
             {pt(selectedLanguage, "p01_reset")}
           </button>
@@ -232,14 +233,11 @@ export default function HomePage() {
           <div className="mk-p01-queue">
             <h3 className="mk-p01-queue__title">{pt(selectedLanguage, "p01_queue_t")}</h3>
             <div className="mk-p01-queue__body">
-              <span className="mk-p01-queue__count">12</span>
-              <span className="mk-p01-queue__label">{pt(selectedLanguage, "p01_queue_label", { total: 40, mins: 15 })}</span>
+              <span className="mk-p01-queue__label">{pt(selectedLanguage, "p01_queue_label")}</span>
             </div>
             <progress
               className="mk-p01-queue__bar"
-              value={12}
-              max={40}
-              aria-label={pt(selectedLanguage, "p01_queue_aria", { count: 12, total: 40 })}
+              aria-label={pt(selectedLanguage, "p01_queue_aria")}
             />
           </div>
 
