@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:e2e": "next build && playwright test"
+    "test:e2e": "cross-env NEXT_PUBLIC_API_URL=http://127.0.0.1:8124 next build && playwright test"
   },
   "dependencies": {
     "lucide-react": "^1.47.0",
@@ -21,6 +21,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "autoprefixer": "^10.4.20",
+    "cross-env": "^10.1.0",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2"

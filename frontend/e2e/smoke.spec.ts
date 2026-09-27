@@ -43,6 +43,29 @@ function interviewQuestion(page: Page) {
   return page.locator(".mk-p04-h1");
 }
 
+function skipStep(page: Page) {
+  return page.getByRole("button", { name: "Skip this step" });
+}
+
+// Answer once; wait until the interview advances (new question) or leaves
+// the interview (completion/safety). Returns true when still interviewing.
+async function answerAndAdvance(page: Page, inputPH: string, nextName: string, text: string): Promise<boolean> {
+  const h1 = interviewQuestion(page);
+  const q1 = ((await h1.textContent()) ?? "").trim();
+  await answerInterview(page, inputPH, nextName, text);
+  await page.waitForFunction(
+    (prev) => {
+      const h = document.querySelector(".mk-p04-h1");
+      if (!h) return true;
+      return ((h.textContent ?? "").trim() !== prev);
+    },
+    q1,
+    { timeout: 15_000 },
+  );
+  if ((await skipStep(page).count()) > 0) return false;
+  return (await h1.count()) > 0;
+}
+
 async function completePriorVisit(request: APIRequestContext): Promise<string> {
   const start = await request.post(`${API}/session/start`, {
     data: { patient: { name: "Prior Pat", age: 50, gender: "male" }, language: "en", visit_type: "new" },
@@ -83,8 +106,7 @@ test("1. new patient EN adaptive interview to token + waiting", async ({ page })
     "It is mild.",
     "It disturbs my sleep.",
   ]) {
-    await answerInterview(page, "Type your response here", "Next Question", a);
-    if (await page.getByRole("button", { name: "Skip this step" }).count()) break;
+    if (!(await answerAndAdvance(page, "Type your response here", "Next Question", a))) break;
   }
   // documents → skip → summary → token → waiting
   await page.getByRole("button", { name: "Skip this step" }).click();
@@ -158,8 +180,7 @@ test("5. refresh during interview restores state", async ({ page }) => {
   await expect(interviewQuestion(page)).toHaveText(before, { timeout: 15_000 });
 });
 
-test("6. multi-fact answer does not re-ask known duration", async ({ page }) => {
-  await chooseLanguage(page, "English");
+test("6. multi-fact answer does not re-ask known duration", async ({ page }) => {  await chooseLanguage(page, "English");
   await continueToPatient(page, "Continue to Consent");
   await fillWelcome(page, "Enter your name", "Enter your age", "Start Now");
   await passConsent(page, "Agree & Continue");
@@ -171,4 +192,83 @@ test("6. multi-fact answer does not re-ask known duration", async ({ page }) => 
     "I've had this for two weeks, it is mild, and spicy food makes it worse.",
   );
   await expect(interviewQuestion(page)).not.toContainText("How long have you been experiencing this issue?");
+});
+
+test("7. emergency flow freezes interview and escalates to doctor", async ({ page }) => {
+  const uname = `Smoke Emerg ${Date.now()}`;
+  await chooseLanguage(page, "English");
+  await continueToPatient(page, "Continue to Consent");
+  await page.getByPlaceholder("Enter your name").fill(uname);
+  await page.getByPlaceholder("Enter your age").fill("34");
+  await page.getByRole("button", { name: "Start Now" }).click();
+  await passConsent(page, "Agree & Continue");
+  await passCodeScreen(page, "Continue to Interview");
+  await answerInterview(page, "Type your response here", "Next Question", "vomiting blood since morning");
+  // localized P05 safety screen, interview frozen
+  await expect(page.getByText("Please speak with a staff member before continuing")).toBeVisible();
+  await expect(page.getByText("Intake Paused")).toBeVisible();
+  // refresh keeps the freeze (no bypass)
+  await page.reload();
+  await expect(page.getByText("Please speak with a staff member before continuing")).toBeVisible({ timeout: 15_000 });
+  // doctor sees the escalation
+  await page.goto("/doctor");
+  await expect(page.getByText("Emergency Safety Escalations")).toBeVisible();
+  await expect(page.getByText(uname)).toBeVisible();
+});
+
+test("8. emergency flow in Hindi shows Hindi safety screen", async ({ page }) => {
+  await chooseLanguage(page, "हिन्दी");
+  await continueToPatient(page, "सहमति के लिए आगे बढ़ें");
+  await fillWelcome(page, "अपना नाम लिखें", "अपनी आयु लिखें", "अभी शुरू करें");
+  await passConsent(page, "सहमत हूँ और आगे बढ़ें");
+  await passCodeScreen(page, "साक्षात्कार के लिए आगे बढ़ें");
+  await answerInterview(page, "अपना उत्तर यहाँ लिखें", "अगला प्रश्न", "मुझे सीने में दर्द है");
+  await expect(page.getByText("कृपया आगे बढ़ने से पहले किसी कर्मचारी से बात करें")).toBeVisible();
+});
+
+test("9. document upload with no OCR keys recovers via manual correction", async ({ page }) => {
+  // No vision keys in this environment: real backend stores a needs_review
+  // doc. The patient corrects it by hand and continues to token.
+  await chooseLanguage(page, "English");
+  await continueToPatient(page, "Continue to Consent");
+  await fillWelcome(page, "Enter your name", "Enter your age", "Start Now");
+  await passConsent(page, "Agree & Continue");
+  await passCodeScreen(page, "Continue to Interview");
+  for (const a of ["Stomach burning.", "Two weeks.", "Spicy food.", "Mild.", "Sleep disturbed."]) {
+    if (!(await answerAndAdvance(page, "Type your response here", "Next Question", a))) break;
+  }
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  await page.locator('input[type="file"]').setInputFiles({ name: "rx.png", mimeType: "image/png", buffer: png });
+  await page.getByRole("button", { name: "Upload" }).click();
+  await expect(page.getByText("Needs Review")).toBeVisible({ timeout: 15_000 });
+  await page.locator(".mk-p06-field__input").first().fill("Metformin");
+  await page.getByRole("button", { name: "Save Correction" }).click();
+  await page.getByRole("button", { name: "Continue to Summary" }).click();
+  await expect(page.getByText("Review your information")).toBeVisible();
+  await expect(page.getByText("Metformin").first()).toBeVisible();
+  await page.getByRole("button", { name: "Confirm & Generate Token" }).click();
+  await expect(page.getByText("Your information is confirmed")).toBeVisible();
+});
+
+test("10. doctor receives the completed case in the department queue", async ({ page }) => {
+  await chooseLanguage(page, "English");
+  await continueToPatient(page, "Continue to Consent");
+  await fillWelcome(page, "Enter your name", "Enter your age", "Start Now");
+  await passConsent(page, "Agree & Continue");
+  await passCodeScreen(page, "Continue to Interview");
+  for (const a of ["Knee pain.", "One month.", "Stairs.", "Stiff mornings.", "Walking hard."]) {
+    if (!(await answerAndAdvance(page, "Type your response here", "Next Question", a))) break;
+  }
+  await page.getByRole("button", { name: "Skip this step" }).click();
+  await page.getByRole("button", { name: "Confirm & Generate Token" }).click();
+  const token = ((await page.locator(".mk-p08-token-box__number").textContent()) ?? "").trim();
+  expect(token).toMatch(/-/);
+  const dept = ((await page.locator(".mk-p08-dept__name").textContent()) ?? "").trim();
+  await page.goto("/doctor");
+  const queueBtn = page.getByRole("button", { name: new RegExp(dept.split(" ")[0]) }).first();
+  if (await queueBtn.count()) await queueBtn.click();
+  await expect(page.getByText(token)).toBeVisible({ timeout: 15_000 });
 });

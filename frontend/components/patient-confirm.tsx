@@ -68,10 +68,11 @@ export default function PatientConfirm({ session, sessionId, patientCode, langua
             <div className="mk-p07-grid">
               <span className="mk-p07-grid__label">{pt(language, "r_duration")}</span>
               <div className="mk-p07-grid__value">
-                {hpi?.onset || pt(language, "r_not_specified")}
-                {hpi?.duration ? pt(language, "r_for", { v: hpi.duration }) : ""}
-                {hpi?.severity ? pt(language, "r_severity", { v: hpi.severity }) : ""}
-                {hpi?.character ? `, ${hpi.character}` : ""}
+                {[hpi?.onset || pt(language, "r_not_specified"),
+                  hpi?.duration ? pt(language, "r_for", { v: hpi.duration }) : "",
+                  hpi?.severity ? pt(language, "r_severity", { v: hpi.severity }) : "",
+                  hpi?.character ? `, ${hpi.character}` : ""]
+                  .filter(Boolean).join(" ").replace(" ,", ",")}
               </div>
             </div>
             <div className="mk-p07-provenance">
